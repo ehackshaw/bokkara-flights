@@ -12,7 +12,6 @@ export default async function handler(req, res) {
   try {
 
     const body = req.body || {};
-
     const { origin, destination, date, adults = 1 } = body;
 
     if (!origin || !destination || !date) {
@@ -33,8 +32,7 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json",
-          "Duffel-Version": "2023-11-27"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           data: {
@@ -71,10 +69,8 @@ export default async function handler(req, res) {
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
-        method: "GET",
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
-          "Duffel-Version": "2023-11-27"
+          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`
         }
       }
     );
