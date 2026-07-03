@@ -1,7 +1,5 @@
 export default async function handler(req, res) {
-  // =========================
-  // CORS SETUP (REQUIRED FOR SHOPIFY)
-  // =========================
+
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -11,18 +9,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // =========================
-    // SAFE BODY PARSING
-    // =========================
+
     const body = typeof req.body === "string"
       ? JSON.parse(req.body)
       : req.body || {};
 
     const { origin, destination, date, adults = 1 } = body;
 
-    // =========================
-    // VALIDATION
-    // =========================
     if (!origin || !destination || !date) {
       return res.status(400).json({
         error: "Missing required fields",
@@ -30,28 +23,22 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================
-    // ENV TOKEN (NO HARDCODING)
-    // =========================
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
-    if (!DUFFEL_API_TOKEN) {
-      return res.status(500).json({
-        error: "Missing DUFFEL_API_TOKEN in environment variables"
-      });
-    }
+    const headers = {
+      Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
+      "Content-Type": "application/json",
+      "Duffel-Version": "2023-11-27"
+    };
 
     // =========================
-    // 1. CREATE OFFER REQUEST
+    // 1. OFFER REQUEST
     // =========================
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify({
           data: {
             slices: [
@@ -82,24 +69,18 @@ export default async function handler(req, res) {
     const offerRequestId = offerRequestData.data.id;
 
     // =========================
-    // 2. FETCH OFFERS
+    // 2. GET OFFERS
     // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json"
-        }
+        headers
       }
     );
 
     const offersData = await offersRes.json();
 
-    // =========================
-    // RETURN RESULTS
-    // =========================
     return res.status(200).json(offersData);
 
   } catch (err) {
