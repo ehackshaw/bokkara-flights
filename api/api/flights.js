@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // CORS (needed for Shopify)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -11,29 +10,32 @@ export default async function handler(req, res) {
 
   try {
 
-    const body = req.body || {};
-    const { origin, destination, date, adults = 1 } = body;
+    const { origin, destination, date, adults = 1 } = req.body || {};
 
     if (!origin || !destination || !date) {
       return res.status(400).json({
         error: "Missing required fields",
-        received: body
+        received: req.body
       });
     }
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
+    // 🔥 DEFINE HEADERS ONCE (IMPORTANT FIX)
+    const duffelHeaders = {
+      "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+      "Content-Type": "application/json",
+      "Duffel-Version": "2023-11-27"
+    };
+
     // =========================
-    // 1. CREATE OFFER REQUEST
+    // 1. OFFER REQUEST
     // =========================
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json"
-        },
+        headers: duffelHeaders,
         body: JSON.stringify({
           data: {
             slices: [
@@ -64,13 +66,15 @@ export default async function handler(req, res) {
     const offerRequestId = offerRequestData.data.id;
 
     // =========================
-    // 2. GET OFFERS
+    // 2. OFFERS
     // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
+        method: "GET",
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`
+          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          "Duffel-Version": "2023-11-27"
         }
       }
     );
