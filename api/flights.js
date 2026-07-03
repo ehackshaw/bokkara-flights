@@ -28,12 +28,10 @@ export default async function handler(req, res) {
     const headers = {
       Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
       "Content-Type": "application/json",
-      "Duffel-Version": "2023-01-23"
+      "Duffel-Version": "v2"
     };
 
-    // =========================
-    // 1. OFFER REQUEST
-    // =========================
+    // STEP 1: Create offer request
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
@@ -68,9 +66,7 @@ export default async function handler(req, res) {
 
     const offerRequestId = offerRequestData.data.id;
 
-    // =========================
-    // 2. GET OFFERS
-    // =========================
+    // STEP 2: Get offers
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
