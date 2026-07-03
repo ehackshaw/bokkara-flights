@@ -4,9 +4,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
 
@@ -32,7 +30,7 @@ export default async function handler(req, res) {
     };
 
     // =========================
-    // 1. OFFER REQUEST
+    // 1. CREATE OFFER REQUEST
     // =========================
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
@@ -59,9 +57,9 @@ export default async function handler(req, res) {
 
     const offerRequestData = await offerRequestRes.json();
 
-    if (!offerRequestData.data) {
+    if (!offerRequestData?.data?.id) {
       return res.status(400).json({
-        error: "Duffel offer request failed",
+        error: "Offer request failed",
         details: offerRequestData
       });
     }
@@ -69,16 +67,23 @@ export default async function handler(req, res) {
     const offerRequestId = offerRequestData.data.id;
 
     // =========================
-    // 2. GET OFFERS
+    // 2. RETRY LOGIC (IMPORTANT FIX)
     // =========================
-    const offersRes = await fetch(
-      `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
-      {
-        headers
-      }
-    );
+    let offersData = null;
 
-    const offersData = await offersRes.json();
+    for (let i = 0; i < 3; i++) {
+
+      const offersRes = await fetch(
+        `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
+        { headers }
+      );
+
+      offersData = await offersRes.json();
+
+      if (offersData?.data?.length > 0) break;
+
+      await new Promise(r => setTimeout(r, 1200)); // wait 1.2s
+    }
 
     return res.status(200).json(offersData);
 
