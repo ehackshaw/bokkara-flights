@@ -10,26 +10,35 @@ export default async function handler(req, res) {
 
   try {
 
-    const { origin, destination, date, adults = 1 } = req.body || {};
+    const body = JSON.parse(JSON.stringify(req.body || {}));
+
+    const { origin, destination, date, adults = 1 } = body;
 
     if (!origin || !destination || !date) {
       return res.status(400).json({
         error: "Missing required fields",
-        received: req.body
+        received: body
       });
     }
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
-    // STEP 1: Create offer request
+    // 🔥 FORCE HEADERS OBJECT (NO INLINE SPREAD ISSUES)
+    const headers = new Map();
+    headers.set("Authorization", `Bearer ${DUFFEL_API_TOKEN}`);
+    headers.set("Content-Type", "application/json");
+    headers.set("Duffel-Version", "v1");
+
+    const headerObject = Object.fromEntries(headers);
+
+    // =========================
+    // 1. OFFER REQUEST
+    // =========================
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json"
-        },
+        headers: headerObject,
         body: JSON.stringify({
           data: {
             slices: [
@@ -59,13 +68,13 @@ export default async function handler(req, res) {
 
     const offerRequestId = offerRequestData.data.id;
 
-    // STEP 2: Get offers
+    // =========================
+    // 2. GET OFFERS
+    // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`
-        }
+        headers: headerObject
       }
     );
 
