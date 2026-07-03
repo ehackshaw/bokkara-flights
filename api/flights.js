@@ -25,8 +25,7 @@ export default async function handler(req, res) {
 
     if (!origin || !destination || !date) {
       return res.status(400).json({
-        error: "Missing required fields",
-        received: body
+        error: "Missing required fields"
       });
     }
 
@@ -38,83 +37,73 @@ export default async function handler(req, res) {
       "Duffel-Version": "2023-01-23"
     };
 
-    // =========================
-    // CLEAN CABIN HANDLING
-    // =========================
-    const allowedCabins = [
-      "economy",
-      "premium_economy",
-      "business",
-      "first"
-    ];
+    // normalize cabin
+    const cabin_class = (cabin || "economy").toLowerCase();
 
-    const cabin_class = allowedCabins.includes(
-      (cabin || "").toLowerCase().trim()
-    )
-      ? (cabin || "").toLowerCase().trim()
+    // VALID CABINS ONLY
+    const validCabins = ["economy", "business", "first"];
+
+    const finalCabin = validCabins.includes(cabin_class)
+      ? cabin_class
       : "economy";
 
     // =========================
-    // FUNCTION: CREATE + FETCH OFFERS
+    // CREATE OFFER REQUEST
     // =========================
-    async function getOffers(cabinType) {
+    const offerRequestRes = await fetch(
+      "https://api.duffel.com/air/offer_requests",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          data: {
+            slices: [
+              {
+                origin,
+                destination,
+                departure_date: date
+              }
+            ],
+            passengers: Array.from({ length: Number(adults) }, () => ({
+              type: "adult"
+            })),
 
-      const offerRequestRes = await fetch(
-        "https://api.duffel.com/air/offer_requests",
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            data: {
-              slices: [
-                {
-                  origin,
-                  destination,
-                  departure_date: date
-                }
-              ],
-              passengers: Array.from({ length: Number(adults) }, () => ({
-                type: "adult"
-              })),
-              cabin_class: cabinType
-            }
-          })
-        }
-      );
-
-      const offerRequestData = await offerRequestRes.json();
-
-      if (!offerRequestData.data?.id) {
-        return null;
+            // IMPORTANT: cabin filter
+            cabin_class: finalCabin
+          }
+        })
       }
+    );
 
-      const offerRequestId = offerRequestData.data.id;
+    const offerRequestData = await offerRequestRes.json();
 
-      const offersRes = await fetch(
-        `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
-        {
-          method: "GET",
-          headers
-        }
-      );
-
-      const offersData = await offersRes.json();
-
-      return offersData.data || [];
+    if (!offerRequestData.data?.id) {
+      return res.status(400).json({
+        error: "Duffel offer request failed",
+        details: offerRequestData
+      });
     }
 
-    // =========================
-    // 1. TRY SELECTED CABIN
-    // =========================
-    let offers = await getOffers(cabin_class);
+    const offerRequestId = offerRequestData.data.id;
 
     // =========================
-    // 2. FALLBACK IF EMPTY
+    // FETCH OFFERS
     // =========================
-    if (!offers || offers.length === 0) {
-      console.log(`No offers for ${cabin_class}, falling back to economy...`);
-      offers = await getOffers("economy");
-    }
+    const offersRes = await fetch(
+      `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
+      {
+        method: "GET",
+        headers
+      }
+    );
+
+    const offersData = await offersRes.json();
+
+    const offers = offersData.data || [];
+
+    // IMPORTANT DEBUG (keep for now)
+    console.log("CABIN:", finalCabin);
+    console.log("OFFERS COUNT:", offers.length);
 
     return res.status(200).json({
       data: offers
