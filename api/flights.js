@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -15,17 +14,12 @@ export default async function handler(req, res) {
       ? JSON.parse(req.body)
       : req.body || {};
 
-    const {
-      origin,
-      destination,
-      date,
-      adults = 1,
-      cabin = "economy"
-    } = body;
+    const { origin, destination, date, adults = 1 } = body;
 
     if (!origin || !destination || !date) {
       return res.status(400).json({
-        error: "Missing required fields"
+        error: "Missing required fields",
+        received: body
       });
     }
 
@@ -37,18 +31,8 @@ export default async function handler(req, res) {
       "Duffel-Version": "2023-01-23"
     };
 
-    // normalize cabin
-    const cabin_class = (cabin || "economy").toLowerCase();
-
-    // VALID CABINS ONLY
-    const validCabins = ["economy", "business", "first"];
-
-    const finalCabin = validCabins.includes(cabin_class)
-      ? cabin_class
-      : "economy";
-
     // =========================
-    // CREATE OFFER REQUEST
+    // 1. OFFER REQUEST
     // =========================
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
@@ -67,9 +51,7 @@ export default async function handler(req, res) {
             passengers: Array.from({ length: Number(adults) }, () => ({
               type: "adult"
             })),
-
-            // IMPORTANT: cabin filter
-            cabin_class: finalCabin
+            cabin_class: "economy"
           }
         })
       }
@@ -77,7 +59,7 @@ export default async function handler(req, res) {
 
     const offerRequestData = await offerRequestRes.json();
 
-    if (!offerRequestData.data?.id) {
+    if (!offerRequestData.data) {
       return res.status(400).json({
         error: "Duffel offer request failed",
         details: offerRequestData
@@ -87,27 +69,18 @@ export default async function handler(req, res) {
     const offerRequestId = offerRequestData.data.id;
 
     // =========================
-    // FETCH OFFERS
+    // 2. GET OFFERS
     // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
-        method: "GET",
         headers
       }
     );
 
     const offersData = await offersRes.json();
 
-    const offers = offersData.data || [];
-
-    // IMPORTANT DEBUG (keep for now)
-    console.log("CABIN:", finalCabin);
-    console.log("OFFERS COUNT:", offers.length);
-
-    return res.status(200).json({
-      data: offers
-    });
+    return res.status(200).json(offersData);
 
   } catch (err) {
     return res.status(500).json({
