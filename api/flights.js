@@ -1,5 +1,6 @@
 export default async function handler(req, res) {
 
+  // CORS (needed for Shopify)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -23,30 +24,35 @@ export default async function handler(req, res) {
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
-    // 1. Create offer request
-    const offerRequestRes = await fetch("https://api.duffel.com/air/offer_requests", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
-        "Content-Type": "application/json",
-        "Duffel-Version": "v1"
-      },
-      body: JSON.stringify({
-        data: {
-          slices: [
-            {
-              origin,
-              destination,
-              departure_date: date
-            }
-          ],
-          passengers: Array.from({ length: adults }, () => ({
-            type: "adult"
-          })),
-          cabin_class: "economy"
-        }
-      })
-    });
+    // =========================
+    // 1. CREATE OFFER REQUEST
+    // =========================
+    const offerRequestRes = await fetch(
+      "https://api.duffel.com/air/offer_requests",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          "Content-Type": "application/json",
+          "Duffel-Version": "2023-11-27"
+        },
+        body: JSON.stringify({
+          data: {
+            slices: [
+              {
+                origin,
+                destination,
+                departure_date: date
+              }
+            ],
+            passengers: Array.from({ length: adults }, () => ({
+              type: "adult"
+            })),
+            cabin_class: "economy"
+          }
+        })
+      }
+    );
 
     const offerRequestData = await offerRequestRes.json();
 
@@ -59,13 +65,16 @@ export default async function handler(req, res) {
 
     const offerRequestId = offerRequestData.data.id;
 
-    // 2. Get offers
+    // =========================
+    // 2. GET OFFERS
+    // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
+        method: "GET",
         headers: {
           "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
-          "Duffel-Version": "v1"
+          "Duffel-Version": "2023-11-27"
         }
       }
     );
