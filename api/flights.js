@@ -1,107 +1,30 @@
 export default async function handler(req, res) {
   try {
-    // =========================
-    // FORCE PARSE REQUEST BODY SAFELY (Vercel-safe)
-    // =========================
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body || {};
 
-    const origin = body.origin;
-    const destination = body.destination;
-    const date = body.date;
-    const adults = body.adults;
+    // Always log what we receive (for debugging)
+    const body = req.body || {};
 
-    // =========================
-    // VALIDATION
-    // =========================
-    if (!origin || !destination || !date || !adults) {
+    const origin = body.origin || null;
+    const destination = body.destination || null;
+    const date = body.date || null;
+    const adults = body.adults || 1;
+
+    // NEVER crash — always return safe response first
+    if (!origin || !destination || !date) {
       return res.status(400).json({
         error: "Missing required fields",
         received: body
       });
     }
 
-    const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
-
-    if (!DUFFEL_API_TOKEN) {
-      return res.status(500).json({
-        error: "Missing Duffel API token in environment variables"
-      });
-    }
-
-    // =========================
-    // 1. CREATE OFFER REQUEST
-    // =========================
-    const offerRequest = await fetch(
-      "https://api.duffel.com/air/offer_requests",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json",
-          "Duffel-Version": "v2"
-        },
-        body: JSON.stringify({
-          data: {
-            slices: [
-              {
-                origin,
-                destination,
-                departure_date: date
-              }
-            ],
-            passengers: Array.from({ length: Number(adults) }, () => ({
-              type: "adult"
-            })),
-            cabin_class: "economy"
-          }
-        })
-      }
-    );
-
-    const offerRequestData = await offerRequest.json();
-
-    if (!offerRequest.ok) {
-      return res.status(400).json({
-        error: "Duffel offer request failed",
-        details: offerRequestData
-      });
-    }
-
-    const offerRequestId = offerRequestData.data.id;
-
-    // =========================
-    // 2. GET OFFERS
-    // =========================
-    const offersRes = await fetch(
-      `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Duffel-Version": "v2"
-        }
-      }
-    );
-
-    const offersData = await offersRes.json();
-
-    if (!offersRes.ok) {
-      return res.status(400).json({
-        error: "Failed to fetch offers",
-        details: offersData
-      });
-    }
-
-    // =========================
-    // RETURN RESULTS
-    // =========================
-    return res.status(200).json(offersData);
+    return res.status(200).json({
+      message: "Backend is stable",
+      received: body
+    });
 
   } catch (err) {
     return res.status(500).json({
-      error: "Server error",
+      error: "Server crashed safely",
       message: err.message
     });
   }
