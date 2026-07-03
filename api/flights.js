@@ -1,17 +1,20 @@
 export default async function handler(req, res) {
   try {
     // =========================
-    // PARSE REQUEST BODY SAFELY
+    // FORCE PARSE REQUEST BODY SAFELY (Vercel-safe)
     // =========================
     const body =
       typeof req.body === "string"
         ? JSON.parse(req.body)
         : req.body || {};
 
-    const { origin, destination, date, adults } = body;
+    const origin = body.origin;
+    const destination = body.destination;
+    const date = body.date;
+    const adults = body.adults;
 
     // =========================
-    // VALIDATION (IMPORTANT)
+    // VALIDATION
     // =========================
     if (!origin || !destination || !date || !adults) {
       return res.status(400).json({
@@ -22,6 +25,12 @@ export default async function handler(req, res) {
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
+    if (!DUFFEL_API_TOKEN) {
+      return res.status(500).json({
+        error: "Missing Duffel API token in environment variables"
+      });
+    }
+
     // =========================
     // 1. CREATE OFFER REQUEST
     // =========================
@@ -30,7 +39,7 @@ export default async function handler(req, res) {
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
           "Content-Type": "application/json",
           "Duffel-Version": "v2"
         },
@@ -56,7 +65,7 @@ export default async function handler(req, res) {
 
     if (!offerRequest.ok) {
       return res.status(400).json({
-        error: "Offer request failed",
+        error: "Duffel offer request failed",
         details: offerRequestData
       });
     }
@@ -70,7 +79,7 @@ export default async function handler(req, res) {
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
           "Duffel-Version": "v2"
         }
       }
