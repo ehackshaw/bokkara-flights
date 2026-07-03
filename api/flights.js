@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const headers = {
       Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
       "Content-Type": "application/json",
-      "Duffel-Version": "2023-11-27"
+      "Duffel-Version": "2023-01-23"
     };
 
     // =========================
@@ -74,7 +74,6 @@ export default async function handler(req, res) {
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
-        method: "GET",
         headers
       }
     );
