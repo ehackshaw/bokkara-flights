@@ -1,17 +1,45 @@
 export default async function handler(req, res) {
   try {
-    const { origin, destination, date, adults } =
-      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    // =========================
+    // FORCE PARSE REQUEST BODY SAFELY (Vercel-safe)
+    // =========================
+    const body =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body || {};
+
+    const origin = body.origin;
+    const destination = body.destination;
+    const date = body.date;
+    const adults = body.adults;
+
+    // =========================
+    // VALIDATION
+    // =========================
+    if (!origin || !destination || !date || !adults) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        received: body
+      });
+    }
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
-    // STEP 1: Create offer request
+    if (!DUFFEL_API_TOKEN) {
+      return res.status(500).json({
+        error: "Missing Duffel API token in environment variables"
+      });
+    }
+
+    // =========================
+    // 1. CREATE OFFER REQUEST
+    // =========================
     const offerRequest = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
           "Content-Type": "application/json",
           "Duffel-Version": "v2"
         },
@@ -24,7 +52,7 @@ export default async function handler(req, res) {
                 departure_date: date
               }
             ],
-            passengers: Array.from({ length: adults }, () => ({
+            passengers: Array.from({ length: Number(adults) }, () => ({
               type: "adult"
             })),
             cabin_class: "economy"
@@ -37,19 +65,21 @@ export default async function handler(req, res) {
 
     if (!offerRequest.ok) {
       return res.status(400).json({
-        error: "Offer request failed",
+        error: "Duffel offer request failed",
         details: offerRequestData
       });
     }
 
     const offerRequestId = offerRequestData.data.id;
 
-    // STEP 2: Get offers
+    // =========================
+    // 2. GET OFFERS
+    // =========================
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
         headers: {
-          "Authorization": `Bearer ${DUFFEL_API_TOKEN}`,
+          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
           "Duffel-Version": "v2"
         }
       }
@@ -64,12 +94,15 @@ export default async function handler(req, res) {
       });
     }
 
-    res.status(200).json(offersData);
+    // =========================
+    // RETURN RESULTS
+    // =========================
+    return res.status(200).json(offersData);
 
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       error: "Server error",
-      details: err.message
+      message: err.message
     });
   }
 }
