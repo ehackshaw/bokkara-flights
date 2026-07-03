@@ -11,7 +11,6 @@ export default async function handler(req, res) {
 
   try {
 
-    // Parse body safely
     const body = typeof req.body === "string"
       ? JSON.parse(req.body)
       : req.body || {};
@@ -24,7 +23,6 @@ export default async function handler(req, res) {
       cabin = "economy"
     } = body;
 
-    // Validate input
     if (!origin || !destination || !date) {
       return res.status(400).json({
         error: "Missing required fields",
@@ -40,7 +38,9 @@ export default async function handler(req, res) {
       "Duffel-Version": "2023-01-23"
     };
 
-    // Allowed cabins (safety layer)
+    // =========================
+    // CLEAN CABIN HANDLING
+    // =========================
     const allowedCabins = [
       "economy",
       "premium_economy",
@@ -48,66 +48,77 @@ export default async function handler(req, res) {
       "first"
     ];
 
-    const cabin_class = allowedCabins.includes(cabin)
-      ? cabin
+    const cabin_class = allowedCabins.includes(
+      (cabin || "").toLowerCase().trim()
+    )
+      ? (cabin || "").toLowerCase().trim()
       : "economy";
 
     // =========================
-    // 1. CREATE OFFER REQUEST
+    // FUNCTION: CREATE + FETCH OFFERS
     // =========================
-    const offerRequestRes = await fetch(
-      "https://api.duffel.com/air/offer_requests",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          data: {
-            slices: [
-              {
-                origin,
-                destination,
-                departure_date: date
-              }
-            ],
-            passengers: Array.from({ length: Number(adults) }, () => ({
-              type: "adult"
-            })),
+    async function getOffers(cabinType) {
 
-            // ✅ THIS IS THE CRITICAL FIX
-            cabin_class: cabin_class
-          }
-        })
+      const offerRequestRes = await fetch(
+        "https://api.duffel.com/air/offer_requests",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            data: {
+              slices: [
+                {
+                  origin,
+                  destination,
+                  departure_date: date
+                }
+              ],
+              passengers: Array.from({ length: Number(adults) }, () => ({
+                type: "adult"
+              })),
+              cabin_class: cabinType
+            }
+          })
+        }
+      );
+
+      const offerRequestData = await offerRequestRes.json();
+
+      if (!offerRequestData.data?.id) {
+        return null;
       }
-    );
 
-    const offerRequestData = await offerRequestRes.json();
+      const offerRequestId = offerRequestData.data.id;
 
-    if (!offerRequestData.data?.id) {
-      return res.status(400).json({
-        error: "Duffel offer request failed",
-        details: offerRequestData
-      });
+      const offersRes = await fetch(
+        `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
+        {
+          method: "GET",
+          headers
+        }
+      );
+
+      const offersData = await offersRes.json();
+
+      return offersData.data || [];
     }
 
-    const offerRequestId = offerRequestData.data.id;
+    // =========================
+    // 1. TRY SELECTED CABIN
+    // =========================
+    let offers = await getOffers(cabin_class);
 
     // =========================
-    // 2. FETCH OFFERS
+    // 2. FALLBACK IF EMPTY
     // =========================
-    const offersRes = await fetch(
-      `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
-      {
-        method: "GET",
-        headers
-      }
-    );
+    if (!offers || offers.length === 0) {
+      console.log(`No offers for ${cabin_class}, falling back to economy...`);
+      offers = await getOffers("economy");
+    }
 
-    const offersData = await offersRes.json();
-
-    // Debug (remove later if you want)
-    console.log("CABIN USED:", cabin_class);
-
-    return res.status(200).json(offersData);
+    return res.status(200).json({
+      data: offers
+    });
 
   } catch (err) {
     return res.status(500).json({
