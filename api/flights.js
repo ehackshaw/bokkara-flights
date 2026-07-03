@@ -21,17 +21,14 @@ export default async function handler(req, res) {
 
     const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
 
-    // =========================
-    // 1. CREATE OFFER REQUEST
-    // =========================
+    // STEP 1: Create offer request
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Content-Type": "application/json",
-          "Duffel-Version": "v1"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           data: {
@@ -55,23 +52,19 @@ export default async function handler(req, res) {
 
     if (!offerRequestData.data) {
       return res.status(400).json({
-        error: "Duffel offer request failed",
+        error: "Offer request failed",
         details: offerRequestData
       });
     }
 
     const offerRequestId = offerRequestData.data.id;
 
-    // =========================
-    // 2. GET OFFERS
-    // =========================
+    // STEP 2: Get offers
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
       {
-        method: "GET",
         headers: {
-          Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
-          "Duffel-Version": "v1"
+          Authorization: `Bearer ${DUFFEL_API_TOKEN}`
         }
       }
     );
