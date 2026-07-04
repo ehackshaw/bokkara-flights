@@ -40,10 +40,10 @@ export default async function handler(req, res) {
     }
 
     const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "Duffel-Version": "2023-01-23"
-    };
+  Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
+  "Content-Type": "application/json",
+  "Duffel-Version": "v2"
+};
 
     const offerBody = {
       data: {
