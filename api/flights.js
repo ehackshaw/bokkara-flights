@@ -22,6 +22,9 @@ export default async function handler(req, res) {
     const return_date = body.return_date;
     const type = body.type || "oneway";
 
+    // NEW: stops filter from frontend
+    const stops = body.max_stops ?? null;
+
     if (!origin || !destination || !departure_date) {
       return res.status(400).json({
         error: "Missing required fields",
@@ -31,7 +34,7 @@ export default async function handler(req, res) {
 
     const params = new URLSearchParams();
 
-    // Required
+    // Required SerpAPI params
     params.set("engine", "google_flights");
     params.set("departure_id", origin);
     params.set("arrival_id", destination);
@@ -40,28 +43,44 @@ export default async function handler(req, res) {
     params.set("hl", "en");
     params.set("gl", "us");
 
-    // Return more complete results
+    // Better results
     params.set("deep_search", "true");
     params.set("show_hidden", "true");
-    params.set("sort_by", "2"); // Cheapest
+    params.set("sort_by", "2"); // cheapest first
 
-    // Trip Type
+    // Trip type
     if (type === "roundtrip") {
       params.set("type", "1");
 
       if (!return_date) {
         return res.status(400).json({
-          error: "Return date is required for roundtrip searches."
+          error: "Return date required for roundtrip"
         });
       }
 
       params.set("return_date", return_date);
-
     } else {
       params.set("type", "2");
     }
 
-    // Optional filters (only if your frontend sends them later)
+    /**
+     * =========================
+     * STOPS FILTER (IMPORTANT)
+     * =========================
+     *
+     * SerpAPI does NOT strictly enforce stops filtering.
+     * This is a hint only.
+     */
+    if (stops !== null && stops !== undefined) {
+      const stopValue = parseInt(stops);
+
+      // safety clamp
+      if ([0, 1, 2].includes(stopValue)) {
+        params.set("stops", stopValue);
+      }
+    }
+
+    // Optional filters
     if (body.travel_class) {
       params.set("travel_class", body.travel_class);
     }
@@ -72,10 +91,6 @@ export default async function handler(req, res) {
 
     if (body.children) {
       params.set("children", body.children);
-    }
-
-    if (body.stops) {
-      params.set("stops", body.stops);
     }
 
     if (body.max_price) {
@@ -122,7 +137,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Return the raw response so the frontend has access to every field.
     return res.status(200).json(data);
 
   } catch (err) {
