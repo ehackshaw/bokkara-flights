@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     const headers = {
-  Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
+    Authorization: `Bearer ${token}`,
   "Content-Type": "application/json",
   "Duffel-Version": "v2"
 };
