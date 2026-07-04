@@ -16,42 +16,104 @@ export default async function handler(req, res) {
 
     console.log("🔥 Incoming request:", body);
 
-    const origin = (body.origin || "").toUpperCase();
-    const destination = (body.destination || "").toUpperCase();
+    const origin = (body.origin || "").trim().toUpperCase();
+    const destination = (body.destination || "").trim().toUpperCase();
     const departure_date = body.departure_date;
     const return_date = body.return_date;
     const type = body.type || "oneway";
 
     if (!origin || !destination || !departure_date) {
       return res.status(400).json({
-        error: "Missing fields",
+        error: "Missing required fields",
         received: body
       });
     }
 
-    // Build SerpAPI params
-    const params = new URLSearchParams({
-      engine: "google_flights",
-      departure_id: origin,
-      arrival_id: destination,
-      outbound_date: departure_date,
-      type: type === "roundtrip" ? "1" : "2",
-      api_key: process.env.SERPAPI_KEY
-    });
+    const params = new URLSearchParams();
 
-    // Add return date if roundtrip
-    if (type === "roundtrip" && return_date) {
-      params.append("return_date", return_date);
+    // Required
+    params.set("engine", "google_flights");
+    params.set("departure_id", origin);
+    params.set("arrival_id", destination);
+    params.set("outbound_date", departure_date);
+    params.set("currency", "USD");
+    params.set("hl", "en");
+    params.set("gl", "us");
+
+    // Return more complete results
+    params.set("deep_search", "true");
+    params.set("show_hidden", "true");
+    params.set("sort_by", "2"); // Cheapest
+
+    // Trip Type
+    if (type === "roundtrip") {
+      params.set("type", "1");
+
+      if (!return_date) {
+        return res.status(400).json({
+          error: "Return date is required for roundtrip searches."
+        });
+      }
+
+      params.set("return_date", return_date);
+
+    } else {
+      params.set("type", "2");
     }
+
+    // Optional filters (only if your frontend sends them later)
+    if (body.travel_class) {
+      params.set("travel_class", body.travel_class);
+    }
+
+    if (body.adults) {
+      params.set("adults", body.adults);
+    }
+
+    if (body.children) {
+      params.set("children", body.children);
+    }
+
+    if (body.stops) {
+      params.set("stops", body.stops);
+    }
+
+    if (body.max_price) {
+      params.set("max_price", body.max_price);
+    }
+
+    if (body.include_airlines) {
+      params.set("include_airlines", body.include_airlines);
+    }
+
+    if (body.exclude_airlines) {
+      params.set("exclude_airlines", body.exclude_airlines);
+    }
+
+    params.set("api_key", process.env.SERPAPI_KEY);
 
     const url = `https://serpapi.com/search.json?${params.toString()}`;
 
-    console.log("🌍 SerpAPI URL:", url);
+    console.log("🌍 SerpAPI URL:");
+    console.log(url.replace(process.env.SERPAPI_KEY, "***"));
 
     const response = await fetch(url);
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: "SerpAPI request failed",
+        status: response.status
+      });
+    }
+
     const data = await response.json();
 
-    console.log("📦 SerpAPI RESPONSE:", JSON.stringify(data, null, 2));
+    console.log(
+      `✅ Returned ${
+        (data.best_flights?.length || 0) +
+        (data.other_flights?.length || 0)
+      } flights`
+    );
 
     if (data.error) {
       return res.status(500).json({
@@ -60,7 +122,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🚨 IMPORTANT: Return RAW SerpAPI response (no transformation)
+    // Return the raw response so the frontend has access to every field.
     return res.status(200).json(data);
 
   } catch (err) {
