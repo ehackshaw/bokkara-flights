@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -20,16 +19,10 @@ export default async function handler(req, res) {
         ? JSON.parse(req.body)
         : req.body || {};
 
-    let {
-      origin,
-      destination,
-      date,
-      adults = 1
-    } = body;
-
-    origin = String(origin || "").trim().toUpperCase();
-    destination = String(destination || "").trim().toUpperCase();
-    date = String(date || "").trim();
+    const origin = String(body.origin || "").trim().toUpperCase();
+    const destination = String(body.destination || "").trim().toUpperCase();
+    const date = String(body.date || "").trim();
+    const adults = Number(body.adults || 1);
 
     if (!origin || !destination || !date) {
       return res.status(400).json({
@@ -38,25 +31,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const DUFFEL_API_TOKEN = process.env.DUFFEL_API_TOKEN;
+    const token = process.env.DUFFEL_API_TOKEN;
 
-    if (!DUFFEL_API_TOKEN) {
+    if (!token) {
       return res.status(500).json({
-        error: "Missing DUFFEL_API_TOKEN environment variable."
+        error: "DUFFEL_API_TOKEN is missing."
       });
     }
 
     const headers = {
-      Authorization: `Bearer ${DUFFEL_API_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       "Duffel-Version": "2023-01-23"
     };
 
-    // -------------------------
-    // Offer Request Body
-    // -------------------------
-
-    const offerRequestBody = {
+    const offerBody = {
       data: {
         slices: [
           {
@@ -65,72 +54,36 @@ export default async function handler(req, res) {
             departure_date: date
           }
         ],
-        passengers: Array.from(
-          { length: Number(adults) || 1 },
-          () => ({
-            type: "adult"
-          })
-        ),
+        passengers: Array.from({ length: adults }, () => ({
+          type: "adult"
+        })),
         cabin_class: "economy"
       }
     };
 
-    console.log("Duffel Request:");
-    console.log(JSON.stringify(offerRequestBody, null, 2));
-
-    // -------------------------
-    // Create Offer Request
-    // -------------------------
+    console.log("Sending to Duffel:");
+    console.log(JSON.stringify(offerBody, null, 2));
 
     const offerRequestRes = await fetch(
       "https://api.duffel.com/air/offer_requests",
       {
         method: "POST",
         headers,
-        body: JSON.stringify(offerRequestBody)
+        body: JSON.stringify(offerBody)
       }
     );
 
-    const offerRequestText = await offerRequestRes.text();
+    const offerRequestData = await offerRequestRes.json();
 
-    let offerRequestData;
-
-    try {
-      offerRequestData = JSON.parse(offerRequestText);
-    } catch {
-      return res.status(500).json({
-        error: "Duffel returned invalid JSON",
-        raw: offerRequestText
-      });
-    }
-
-    // -------------------------
-    // Show REAL Duffel error
-    // -------------------------
-
+    // IMPORTANT: Return Duffel's response exactly
     if (!offerRequestRes.ok) {
-      console.error("Duffel Error:");
+      console.error("Duffel Response:");
       console.error(JSON.stringify(offerRequestData, null, 2));
 
-      return res.status(offerRequestRes.status).json({
-        error: "Duffel offer request failed",
-        status: offerRequestRes.status,
-        details: offerRequestData
-      });
+      return res.status(offerRequestRes.status).json(offerRequestData);
     }
 
-    const offerRequestId = offerRequestData?.data?.id;
-
-    if (!offerRequestId) {
-      return res.status(500).json({
-        error: "Duffel did not return an offer request ID.",
-        details: offerRequestData
-      });
-    }
-
-    // -------------------------
-    // Fetch Offers
-    // -------------------------
+    const offerRequestId = offerRequestData.data.id;
 
     const offersRes = await fetch(
       `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
@@ -139,24 +92,10 @@ export default async function handler(req, res) {
       }
     );
 
-    const offersText = await offersRes.text();
-
-    let offersData;
-
-    try {
-      offersData = JSON.parse(offersText);
-    } catch {
-      return res.status(500).json({
-        error: "Duffel returned invalid offers JSON",
-        raw: offersText
-      });
-    }
+    const offersData = await offersRes.json();
 
     if (!offersRes.ok) {
-      return res.status(offersRes.status).json({
-        error: "Duffel offers request failed",
-        details: offersData
-      });
+      return res.status(offersRes.status).json(offersData);
     }
 
     return res.status(200).json(offersData);
