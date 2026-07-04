@@ -16,57 +16,72 @@ export default async function handler(req, res) {
       origin,
       destination,
       departure_date,
-      return_date,
-      type
-    } = req.body;
+      return_date
+    } = req.body || {};
 
     if (!origin || !destination || !departure_date) {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({
+        error: "Missing required fields",
+        received: req.body
+      });
     }
 
-    // Build SerpAPI query
     const params = new URLSearchParams({
       engine: "google_flights",
       departure_id: origin,
       arrival_id: destination,
       outbound_date: departure_date,
-      type: return_date ? "2" : "1",
       api_key: process.env.SERPAPI_KEY
     });
 
+    // only add return_date if round trip
     if (return_date) {
       params.append("return_date", return_date);
     }
 
     const url = `https://serpapi.com/search.json?${params.toString()}`;
 
+    console.log("🔎 SerpAPI Request:", url);
+
     const response = await fetch(url);
     const data = await response.json();
 
-    // Extract flights
+    console.log("📦 SerpAPI Response Keys:", Object.keys(data));
+
+    // 🔥 IMPORTANT: SerpAPI returns different arrays depending on route
     const flights =
       data.best_flights ||
       data.other_flights ||
+      data.flights ||
       [];
 
-    // Normalize into YOUR frontend format
+    if (!flights.length) {
+      console.log("⚠️ No flights found for request");
+    }
+
     const offers = flights.map(f => {
       const legs = f.flights || [];
 
-      return {
-        price: f.price || 0,
-        total_currency: "USD",
+      const segments = legs.map(l => ({
+        marketing_carrier: {
+          name: l.airline || "Airline"
+        },
+        departing_at:
+          l.departure_airport?.time ||
+          l.departure_airport?.datetime ||
+          null,
+        arriving_at:
+          l.arrival_airport?.time ||
+          l.arrival_airport?.datetime ||
+          null
+      }));
 
+      return {
+        price: f.price || f.total_price || 0,
+        total_currency: f.currency || "USD",
         slices: [
           {
-            segments: legs.map(l => ({
-              marketing_carrier: {
-                name: l.airline || "Airline"
-              },
-
-              departing_at: l.departure_airport?.time || null,
-              arriving_at: l.arrival_airport?.time || null
-            }))
+            segments
           }
         ]
       };
@@ -79,10 +94,11 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("Flight API Error:", err);
+    console.error("❌ Flight API Error:", err);
 
     return res.status(500).json({
-      error: "Failed to fetch flights"
+      error: "Failed to fetch flights",
+      message: err.message
     });
   }
 }
