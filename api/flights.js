@@ -8,103 +8,81 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed"
-    });
+    return res.status(405).json({ error: "POST only" });
   }
 
   try {
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body || {};
+    const {
+      origin,
+      destination,
+      departure_date,
+      return_date,
+      type
+    } = req.body;
 
-    const origin = String(body.origin || "").trim().toUpperCase();
-    const destination = String(body.destination || "").trim().toUpperCase();
-    const date = String(body.date || "").trim();
-    const adults = Number(body.adults || 1);
-
-    if (!origin || !destination || !date) {
-      return res.status(400).json({
-        error: "Missing required fields",
-        received: body
-      });
+    if (!origin || !destination || !departure_date) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const token = process.env.DUFFEL_API_TOKEN;
+    // Build SerpAPI query
+    const params = new URLSearchParams({
+      engine: "google_flights",
+      departure_id: origin,
+      arrival_id: destination,
+      outbound_date: departure_date,
+      type: return_date ? "2" : "1",
+      api_key: process.env.SERPAPI_KEY
+    });
 
-    if (!token) {
-      return res.status(500).json({
-        error: "DUFFEL_API_TOKEN is missing."
-      });
+    if (return_date) {
+      params.append("return_date", return_date);
     }
 
-    const headers = {
-    Authorization: `Bearer ${token}`,
-  "Content-Type": "application/json",
-  "Duffel-Version": "v2"
-};
+    const url = `https://serpapi.com/search.json?${params.toString()}`;
 
-    const offerBody = {
-      data: {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Extract flights
+    const flights =
+      data.best_flights ||
+      data.other_flights ||
+      [];
+
+    // Normalize into YOUR frontend format
+    const offers = flights.map(f => {
+      const legs = f.flights || [];
+
+      return {
+        price: f.price || 0,
+        total_currency: "USD",
+
         slices: [
           {
-            origin,
-            destination,
-            departure_date: date
+            segments: legs.map(l => ({
+              marketing_carrier: {
+                name: l.airline || "Airline"
+              },
+
+              departing_at: l.departure_airport?.time || null,
+              arriving_at: l.arrival_airport?.time || null
+            }))
           }
-        ],
-        passengers: Array.from({ length: adults }, () => ({
-          type: "adult"
-        })),
-        cabin_class: "economy"
+        ]
+      };
+    });
+
+    return res.status(200).json({
+      data: {
+        offers
       }
-    };
-
-    console.log("Sending to Duffel:");
-    console.log(JSON.stringify(offerBody, null, 2));
-
-    const offerRequestRes = await fetch(
-      "https://api.duffel.com/air/offer_requests",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify(offerBody)
-      }
-    );
-
-    const offerRequestData = await offerRequestRes.json();
-
-    // IMPORTANT: Return Duffel's response exactly
-    if (!offerRequestRes.ok) {
-      console.error("Duffel Response:");
-      console.error(JSON.stringify(offerRequestData, null, 2));
-
-      return res.status(offerRequestRes.status).json(offerRequestData);
-    }
-
-    const offerRequestId = offerRequestData.data.id;
-
-    const offersRes = await fetch(
-      `https://api.duffel.com/air/offers?offer_request_id=${offerRequestId}`,
-      {
-        headers
-      }
-    );
-
-    const offersData = await offersRes.json();
-
-    if (!offersRes.ok) {
-      return res.status(offersRes.status).json(offersData);
-    }
-
-    return res.status(200).json(offersData);
+    });
 
   } catch (err) {
-    console.error(err);
+    console.error("Flight API Error:", err);
 
     return res.status(500).json({
-      error: err.message
+      error: "Failed to fetch flights"
     });
   }
 }
