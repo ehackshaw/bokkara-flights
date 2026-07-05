@@ -16,12 +16,49 @@ export default async function handler(req, res) {
 
     console.log("🔥 Incoming request:", body);
 
-    const origin = (body.origin || "").trim().toUpperCase();
-    const destination = (body.destination || "").trim().toUpperCase();
+    // =========================
+    // NORMALIZERS (FIXED INPUTS)
+    // =========================
+
+    const normalizeTrip = (t) => {
+      if (!t) return "oneway";
+      t = String(t).toLowerCase();
+      if (t.includes("round")) return "roundtrip";
+      return "oneway";
+    };
+
+    const normalizeInt = (v, fallback = 1) => {
+      const n = parseInt(String(v).replace(/\D/g, ""));
+      return isNaN(n) || n <= 0 ? fallback : n;
+    };
+
+    const normalizeStops = (s) => {
+      if (s === null || s === undefined) return null;
+
+      s = String(s).toLowerCase();
+
+      if (s.includes("non") || s === "0") return 0;
+      if (s.includes("1")) return 1;
+
+      return null;
+    };
+
+    // =========================
+    // CLEAN INPUTS
+    // =========================
+
+    const origin = String(body.origin || "").trim().toUpperCase();
+    const destination = String(body.destination || "").trim().toUpperCase();
     const departure_date = body.departure_date;
     const return_date = body.return_date;
-    const type = body.type || "oneway";
-    const stops = body.max_stops ?? null;
+
+    const type = normalizeTrip(body.type);
+    const stops = normalizeStops(body.max_stops);
+    const adults = normalizeInt(body.adults, 1);
+
+    // =========================
+    // VALIDATION
+    // =========================
 
     if (!origin || !destination || !departure_date) {
       return res.status(400).json({
@@ -44,6 +81,10 @@ export default async function handler(req, res) {
     params.set("show_hidden", "true");
     params.set("sort_by", "2");
 
+    // =========================
+    // TRIP TYPE FIX
+    // =========================
+
     if (type === "roundtrip") {
       params.set("type", "1");
 
@@ -58,16 +99,23 @@ export default async function handler(req, res) {
       params.set("type", "2");
     }
 
-    if (stops !== null && stops !== undefined) {
-      const stopValue = parseInt(stops);
-      if ([0, 1, 2].includes(stopValue)) {
-        params.set("stops", stopValue);
-      }
+    // =========================
+    // STOPS FIX
+    // =========================
+
+    if (stops !== null) {
+      params.set("stops", stops);
     }
 
+    // =========================
+    // PASSENGERS FIX
+    // =========================
+
+    params.set("adults", adults);
+
+    // optional extras (safe)
+    if (body.children) params.set("children", normalizeInt(body.children, 0));
     if (body.travel_class) params.set("travel_class", body.travel_class);
-    if (body.adults) params.set("adults", body.adults);
-    if (body.children) params.set("children", body.children);
     if (body.max_price) params.set("max_price", body.max_price);
     if (body.include_airlines) params.set("include_airlines", body.include_airlines);
     if (body.exclude_airlines) params.set("exclude_airlines", body.exclude_airlines);
@@ -76,8 +124,7 @@ export default async function handler(req, res) {
 
     const url = `https://serpapi.com/search.json?${params.toString()}`;
 
-    console.log("🌍 SerpAPI URL:");
-    console.log(url.replace(process.env.SERPAPI_KEY, "***"));
+    console.log("🌍 SerpAPI URL (hidden key)");
 
     const response = await fetch(url);
 
@@ -90,6 +137,13 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
+    console.log(
+      `✅ Returned ${
+        (data.best_flights?.length || 0) +
+        (data.other_flights?.length || 0)
+      } flights`
+    );
+
     if (data.error) {
       return res.status(500).json({
         error: "SerpAPI error",
@@ -97,56 +151,7 @@ export default async function handler(req, res) {
       });
     }
 
-    /* =========================
-       🔥 PRICE NORMALIZER (FIX)
-    ========================= */
-
-    function cleanPrice(value) {
-      if (!value) return 0;
-
-      const num = Number(String(value).replace(/[^0-9.]/g, ""));
-      return isNaN(num) ? 0 : num;
-    }
-
-    function normalizeFlights(list = []) {
-      return list
-        .map(f => {
-          const rawPrice =
-            f.price ||
-            f.total_price ||
-            f.price_total ||
-            f.pricing?.total ||
-            f.amount ||
-            0;
-
-          const price = cleanPrice(rawPrice);
-
-          // remove invalid flights completely
-          if (!price || price <= 0) return null;
-
-          return {
-            ...f,
-            price
-          };
-        })
-        .filter(Boolean);
-    }
-
-    const cleanedResponse = {
-      ...data,
-      best_flights: normalizeFlights(data.best_flights),
-      other_flights: normalizeFlights(data.other_flights),
-      data: normalizeFlights(data.data)
-    };
-
-    console.log(
-      `✅ Returned ${
-        (cleanedResponse.best_flights?.length || 0) +
-        (cleanedResponse.other_flights?.length || 0)
-      } clean flights`
-    );
-
-    return res.status(200).json(cleanedResponse);
+    return res.status(200).json(data);
 
   } catch (err) {
     console.error("🔥 SERVER ERROR:", err);
