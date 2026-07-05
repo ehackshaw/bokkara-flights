@@ -21,8 +21,6 @@ export default async function handler(req, res) {
     const departure_date = body.departure_date;
     const return_date = body.return_date;
     const type = body.type || "oneway";
-
-    // NEW: stops filter from frontend
     const stops = body.max_stops ?? null;
 
     if (!origin || !destination || !departure_date) {
@@ -34,7 +32,6 @@ export default async function handler(req, res) {
 
     const params = new URLSearchParams();
 
-    // Required SerpAPI params
     params.set("engine", "google_flights");
     params.set("departure_id", origin);
     params.set("arrival_id", destination);
@@ -43,12 +40,10 @@ export default async function handler(req, res) {
     params.set("hl", "en");
     params.set("gl", "us");
 
-    // Better results
     params.set("deep_search", "true");
     params.set("show_hidden", "true");
-    params.set("sort_by", "2"); // cheapest first
+    params.set("sort_by", "2");
 
-    // Trip type
     if (type === "roundtrip") {
       params.set("type", "1");
 
@@ -63,47 +58,19 @@ export default async function handler(req, res) {
       params.set("type", "2");
     }
 
-    /**
-     * =========================
-     * STOPS FILTER (IMPORTANT)
-     * =========================
-     *
-     * SerpAPI does NOT strictly enforce stops filtering.
-     * This is a hint only.
-     */
     if (stops !== null && stops !== undefined) {
       const stopValue = parseInt(stops);
-
-      // safety clamp
       if ([0, 1, 2].includes(stopValue)) {
         params.set("stops", stopValue);
       }
     }
 
-    // Optional filters
-    if (body.travel_class) {
-      params.set("travel_class", body.travel_class);
-    }
-
-    if (body.adults) {
-      params.set("adults", body.adults);
-    }
-
-    if (body.children) {
-      params.set("children", body.children);
-    }
-
-    if (body.max_price) {
-      params.set("max_price", body.max_price);
-    }
-
-    if (body.include_airlines) {
-      params.set("include_airlines", body.include_airlines);
-    }
-
-    if (body.exclude_airlines) {
-      params.set("exclude_airlines", body.exclude_airlines);
-    }
+    if (body.travel_class) params.set("travel_class", body.travel_class);
+    if (body.adults) params.set("adults", body.adults);
+    if (body.children) params.set("children", body.children);
+    if (body.max_price) params.set("max_price", body.max_price);
+    if (body.include_airlines) params.set("include_airlines", body.include_airlines);
+    if (body.exclude_airlines) params.set("exclude_airlines", body.exclude_airlines);
 
     params.set("api_key", process.env.SERPAPI_KEY);
 
@@ -123,13 +90,6 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    console.log(
-      `✅ Returned ${
-        (data.best_flights?.length || 0) +
-        (data.other_flights?.length || 0)
-      } flights`
-    );
-
     if (data.error) {
       return res.status(500).json({
         error: "SerpAPI error",
@@ -137,7 +97,56 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json(data);
+    /* =========================
+       🔥 PRICE NORMALIZER (FIX)
+    ========================= */
+
+    function cleanPrice(value) {
+      if (!value) return 0;
+
+      const num = Number(String(value).replace(/[^0-9.]/g, ""));
+      return isNaN(num) ? 0 : num;
+    }
+
+    function normalizeFlights(list = []) {
+      return list
+        .map(f => {
+          const rawPrice =
+            f.price ||
+            f.total_price ||
+            f.price_total ||
+            f.pricing?.total ||
+            f.amount ||
+            0;
+
+          const price = cleanPrice(rawPrice);
+
+          // remove invalid flights completely
+          if (!price || price <= 0) return null;
+
+          return {
+            ...f,
+            price
+          };
+        })
+        .filter(Boolean);
+    }
+
+    const cleanedResponse = {
+      ...data,
+      best_flights: normalizeFlights(data.best_flights),
+      other_flights: normalizeFlights(data.other_flights),
+      data: normalizeFlights(data.data)
+    };
+
+    console.log(
+      `✅ Returned ${
+        (cleanedResponse.best_flights?.length || 0) +
+        (cleanedResponse.other_flights?.length || 0)
+      } clean flights`
+    );
+
+    return res.status(200).json(cleanedResponse);
 
   } catch (err) {
     console.error("🔥 SERVER ERROR:", err);
