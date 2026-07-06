@@ -1,164 +1,310 @@
 export default async function handler(req, res) {
+
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
+
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "POST only" });
+    return res.status(405).json({
+      error:"POST only"
+    });
   }
 
+
   try {
+
     const body = req.body || {};
 
     console.log("🔥 Incoming request:", body);
 
-    // =========================
-    // NORMALIZERS (FIXED INPUTS)
-    // =========================
 
-    const normalizeTrip = (t) => {
-      if (!t) return "oneway";
+
+    function normalizeTrip(t){
+
+      if(!t) return "oneway";
+
       t = String(t).toLowerCase();
-      if (t.includes("round")) return "roundtrip";
-      return "oneway";
-    };
 
-    const normalizeInt = (v, fallback = 1) => {
-      const n = parseInt(String(v).replace(/\D/g, ""));
-      return isNaN(n) || n <= 0 ? fallback : n;
-    };
+      return t.includes("round")
+        ? "roundtrip"
+        : "oneway";
 
-    const normalizeStops = (s) => {
-      if (s === null || s === undefined) return null;
+    }
 
-      s = String(s).toLowerCase();
 
-      if (s.includes("non") || s === "0") return 0;
-      if (s.includes("1")) return 1;
+    function normalizeInt(v,fallback=1){
 
-      return null;
-    };
+      const n=parseInt(String(v).replace(/\D/g,""));
 
-    // =========================
-    // CLEAN INPUTS
-    // =========================
+      return isNaN(n) || n<=0
+        ? fallback
+        : n;
 
-    const origin = String(body.origin || "").trim().toUpperCase();
-    const destination = String(body.destination || "").trim().toUpperCase();
+    }
+
+
+    function addDays(date,days){
+
+      const d=new Date(date);
+
+      d.setDate(d.getDate()+days);
+
+      return d.toISOString().split("T")[0];
+
+    }
+
+
+
+    const origin =
+      String(body.origin || "")
+      .trim()
+      .toUpperCase();
+
+
+    const destination =
+      String(body.destination || "")
+      .trim()
+      .toUpperCase();
+
+
     const departure_date = body.departure_date;
+
     const return_date = body.return_date;
 
+
     const type = normalizeTrip(body.type);
-    const stops = normalizeStops(body.max_stops);
-    const adults = normalizeInt(body.adults, 1);
 
-    // =========================
-    // VALIDATION
-    // =========================
+    const adults = normalizeInt(body.adults,1);
 
-    if (!origin || !destination || !departure_date) {
+
+
+    if(!origin || !destination || !departure_date){
+
       return res.status(400).json({
-        error: "Missing required fields",
-        received: body
+        error:"Missing required fields",
+        received:body
       });
+
     }
 
-    const params = new URLSearchParams();
 
-    params.set("engine", "google_flights");
-    params.set("departure_id", origin);
-    params.set("arrival_id", destination);
-    params.set("outbound_date", departure_date);
-    params.set("currency", "USD");
-    params.set("hl", "en");
-    params.set("gl", "us");
 
-    params.set("deep_search", "true");
-    params.set("show_hidden", "true");
-    params.set("sort_by", "2");
+    async function searchFlights(date){
 
-    // =========================
-    // TRIP TYPE FIX
-    // =========================
 
-    if (type === "roundtrip") {
-      params.set("type", "1");
+      const params = new URLSearchParams();
 
-      if (!return_date) {
-        return res.status(400).json({
-          error: "Return date required for roundtrip"
-        });
+
+      params.set("engine","google_flights");
+
+      params.set("departure_id",origin);
+
+      params.set("arrival_id",destination);
+
+      params.set("outbound_date",date);
+
+      params.set("currency","USD");
+
+      params.set("hl","en");
+
+      params.set("gl","us");
+
+
+      params.set("deep_search","true");
+
+      params.set("show_hidden","true");
+
+      params.set("sort_by","2");
+
+
+      if(type==="roundtrip"){
+
+        params.set("type","1");
+
+        params.set("return_date",return_date);
+
+      }else{
+
+        params.set("type","2");
+
       }
 
-      params.set("return_date", return_date);
-    } else {
-      params.set("type", "2");
+
+      params.set("adults",adults);
+
+
+      params.set(
+        "api_key",
+        process.env.SERPAPI_KEY
+      );
+
+
+
+      const url =
+        `https://serpapi.com/search.json?${params.toString()}`;
+
+
+
+      const response = await fetch(url);
+
+
+      if(!response.ok){
+
+        throw new Error(
+          "SerpAPI failed: "+response.status
+        );
+
+      }
+
+
+      return await response.json();
+
     }
 
-    // =========================
-    // STOPS FIX
-    // =========================
 
-    if (stops !== null) {
-      params.set("stops", stops);
-    }
 
-    // =========================
-    // PASSENGERS FIX
-    // =========================
+    /*
+       FLEXIBLE DATE SEARCH
+       Runs only when frontend requests it
+    */
 
-    params.set("adults", adults);
+    if(body.flexible_dates === true){
 
-    // optional extras (safe)
-    if (body.children) params.set("children", normalizeInt(body.children, 0));
-    if (body.travel_class) params.set("travel_class", body.travel_class);
-    if (body.max_price) params.set("max_price", body.max_price);
-    if (body.include_airlines) params.set("include_airlines", body.include_airlines);
-    if (body.exclude_airlines) params.set("exclude_airlines", body.exclude_airlines);
 
-    params.set("api_key", process.env.SERPAPI_KEY);
+      const calendar=[];
 
-    const url = `https://serpapi.com/search.json?${params.toString()}`;
 
-    console.log("🌍 SerpAPI URL (hidden key)");
+      const dates=[];
 
-    const response = await fetch(url);
 
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: "SerpAPI request failed",
-        status: response.status
+      for(let i=0;i<(body.days || 7);i++){
+
+        dates.push(
+          addDays(departure_date,i)
+        );
+
+      }
+
+
+
+      const searches =
+        await Promise.all(
+          dates.map(date =>
+            searchFlights(date)
+          )
+        );
+
+
+
+      searches.forEach((result,index)=>{
+
+
+        const flights = [
+
+          ...(result.best_flights || []),
+
+          ...(result.other_flights || [])
+
+        ];
+
+
+        flights.sort(
+          (a,b)=>
+          Number(a.price || 0) -
+          Number(b.price || 0)
+        );
+
+
+        const cheapest = flights[0];
+
+
+
+        let logo="";
+
+
+        if(cheapest?.flights?.[0]){
+
+          logo =
+            cheapest.flights[0].airline_logo ||
+            "";
+
+        }
+
+
+
+        calendar.push({
+
+          date:dates[index],
+
+          price: cheapest
+            ? cheapest.price
+            : "--",
+
+          logo:logo
+
+        });
+
+
       });
-    }
 
-    const data = await response.json();
 
-    console.log(
-      `✅ Returned ${
-        (data.best_flights?.length || 0) +
-        (data.other_flights?.length || 0)
-      } flights`
-    );
 
-    if (data.error) {
-      return res.status(500).json({
-        error: "SerpAPI error",
-        details: data.error
+      const main =
+        searches[0];
+
+
+
+      return res.status(200).json({
+
+        best_flights:
+          main.best_flights || [],
+
+        other_flights:
+          main.other_flights || [],
+
+        calendar
+
       });
+
+
     }
+
+
+
+    /*
+       NORMAL SINGLE SEARCH
+    */
+
+
+    const data =
+      await searchFlights(departure_date);
+
+
 
     return res.status(200).json(data);
 
-  } catch (err) {
-    console.error("🔥 SERVER ERROR:", err);
+
+
+  } catch(err){
+
+
+    console.error("🔥 SERVER ERROR:",err);
+
 
     return res.status(500).json({
-      error: "Server crashed",
-      message: err.message
+
+      error:"Server crashed",
+
+      message:err.message
+
     });
+
   }
+
 }
