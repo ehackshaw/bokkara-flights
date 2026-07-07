@@ -364,7 +364,7 @@ export default async function handler(req, res) {
 
 
 
-
+console.log("CALENDAR CHEAPEST:", cheapest);
           calendar.push({
 
 
