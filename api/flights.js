@@ -373,9 +373,15 @@ export default async function handler(req, res) {
 
 
             price:
-              cheapest
-              ? cheapest.price
-              : "--",
+  cheapest
+  ? (
+      cheapest.price ??
+      cheapest.total_price ??
+      cheapest.amount ??
+      cheapest?.price_details?.total ??
+      null
+    )
+  : null,
 
 
             logo,
