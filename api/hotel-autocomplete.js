@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
 
-  // Allow Shopify frontend requests
+  // CORS
   res.setHeader(
     "Access-Control-Allow-Origin",
     "*"
@@ -17,7 +17,6 @@ export default async function handler(req, res) {
   );
 
 
-  // Handle preflight request
   if(req.method === "OPTIONS"){
     return res.status(200).end();
   }
@@ -29,10 +28,10 @@ export default async function handler(req, res) {
     const query = req.query.q;
 
 
-    if(!query){
+    if(!query || query.length < 2){
 
-      return res.status(400).json({
-        error:"Missing search query"
+      return res.status(200).json({
+        suggestions:[]
       });
 
     }
@@ -46,65 +45,64 @@ export default async function handler(req, res) {
     if(!apiKey){
 
       return res.status(500).json({
-        error:"SerpAPI key missing"
+        error:"SERPAPI_KEY not found"
       });
 
     }
 
 
 
-    const url =
-    "https://serpapi.com/search.json?" +
-    new URLSearchParams({
+    const params = new URLSearchParams({
 
-      engine:
-      "google_hotels_autocomplete",
+      engine:"google_hotels_autocomplete",
 
-      q:
-      query,
+      q:query,
 
-      api_key:
-      apiKey
+      api_key:apiKey
 
     });
 
 
 
-    const response =
-    await fetch(url);
+    const response = await fetch(
+      "https://serpapi.com/search.json?" + params
+    );
 
 
 
-    const data =
-    await response.json();
+    const data = await response.json();
 
 
 
-    /*
-       Convert SerpAPI response
-       into a clean format
-    */
+    console.log(
+      "SERPAPI DATA:",
+      JSON.stringify(data)
+    );
+
+
 
     let suggestions = [];
 
 
 
-    if(data.suggestions){
+    if(Array.isArray(data.suggestions)){
 
 
-      suggestions =
-      data.suggestions.map(item => ({
+      suggestions = data.suggestions.map(item => ({
 
 
         name:
         item.name ||
         item.title ||
+        item.text ||
+        item.value ||
         "",
 
 
         description:
         item.description ||
         item.subtitle ||
+        item.location ||
         "",
 
 
@@ -115,6 +113,7 @@ export default async function handler(req, res) {
 
         id:
         item.id ||
+        item.place_id ||
         ""
 
 
@@ -137,15 +136,14 @@ export default async function handler(req, res) {
 
 
     console.error(
-      "Hotel autocomplete error:",
+      "Hotel autocomplete failed:",
       error
     );
 
 
     return res.status(500).json({
 
-      error:
-      "Server error"
+      error:"Server error"
 
     });
 
