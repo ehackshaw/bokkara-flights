@@ -1,5 +1,6 @@
 export default async function handler(req, res) {
 
+
   res.setHeader(
     "Access-Control-Allow-Origin",
     "*"
@@ -21,10 +22,12 @@ export default async function handler(req, res) {
   }
 
 
+
   try {
 
 
     const query = req.query.q;
+
 
 
     if(!query || query.length < 2){
@@ -38,6 +41,7 @@ export default async function handler(req, res) {
 
 
     const apiKey = process.env.SERPAPI_KEY;
+
 
 
     if(!apiKey){
@@ -63,8 +67,8 @@ export default async function handler(req, res) {
 
 
     const response = await fetch(
-      "https://serpapi.com/search.json?" 
-      + params.toString()
+      "https://serpapi.com/search.json?" +
+      params.toString()
     );
 
 
@@ -74,7 +78,7 @@ export default async function handler(req, res) {
 
 
     console.log(
-      "FULL SERPAPI RESPONSE:",
+      "SERPAPI RESPONSE:",
       JSON.stringify(data)
     );
 
@@ -84,82 +88,66 @@ export default async function handler(req, res) {
 
 
 
-    /*
-      Google Maps autocomplete response parser
-    */
-
-
-    if(Array.isArray(data.suggestions)){
-
-
-      suggestions = data.suggestions.map(item=>({
-
-        name:
-        item.value ||
-        item.name ||
-        item.title ||
-        item.text ||
-        "",
-
-
-        description:
-        item.description ||
-        item.subtitle ||
-        "",
-
-
-        type:
-        item.type ||
-        "place",
-
-
-        id:
-        item.place_id ||
-        item.id ||
-        ""
-
-
-      }));
-
-    }
-
-
-
-    /*
-      Backup if SerpAPI returns places
-    */
-
-
     if(
-      suggestions.length === 0 &&
-      Array.isArray(data.places)
+      data.suggestions &&
+      Array.isArray(data.suggestions)
     ){
 
 
-      suggestions = data.places.map(item=>({
-
-        name:
-        item.title ||
-        item.name ||
-        "",
+      suggestions =
+      data.suggestions.map(item=>{
 
 
-        description:
-        item.address ||
-        item.location ||
-        "",
+        const place =
+        item.data || item;
 
 
-        type:
-        item.type ||
-        "place",
+
+        return {
 
 
-        id:
-        item.place_id ||
-        ""
+          name:
 
-      }));
+          place.title ||
+
+          place.name ||
+
+          place.value ||
+
+          "",
+
+
+
+          description:
+
+          place.subtitle ||
+
+          place.description ||
+
+          place.address ||
+
+          "",
+
+
+
+          type:
+
+          place.type ||
+
+          "place",
+
+
+
+          id:
+
+          place.place_id ||
+
+          ""
+
+        };
+
+
+      });
 
 
     }
@@ -177,7 +165,10 @@ export default async function handler(req, res) {
   } catch(error){
 
 
-    console.error(error);
+    console.error(
+      "AUTOCOMPLETE ERROR:",
+      error
+    );
 
 
     return res.status(500).json({
