@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     if(!apiKey){
 
       return res.status(500).json({
-        error:"SERPAPI_KEY not found"
+        error:"SERPAPI_KEY missing"
       });
 
     }
@@ -54,18 +54,22 @@ export default async function handler(req, res) {
 
     const params = new URLSearchParams({
 
-      engine:"google_hotels_autocomplete",
+      engine:
+      "google_maps_autocomplete",
 
-      q:query,
+      q:
+      query,
 
-      api_key:apiKey
+      api_key:
+      apiKey
 
     });
 
 
 
     const response = await fetch(
-      "https://serpapi.com/search.json?" + params
+      "https://serpapi.com/search.json?" 
+      + params.toString()
     );
 
 
@@ -75,7 +79,7 @@ export default async function handler(req, res) {
 
 
     console.log(
-      "SERPAPI DATA:",
+      "MAP AUTOCOMPLETE:",
       JSON.stringify(data)
     );
 
@@ -85,39 +89,51 @@ export default async function handler(req, res) {
 
 
 
+    /*
+      Google Maps autocomplete usually returns:
+      suggestions
+    */
+
+
     if(Array.isArray(data.suggestions)){
 
 
-      suggestions = data.suggestions.map(item => ({
+      suggestions =
+      data.suggestions.map(item=>{
 
 
-        name:
-        item.name ||
-        item.title ||
-        item.text ||
-        item.value ||
-        "",
+        return {
+
+          name:
+          item.value ||
+          item.name ||
+          item.title ||
+          item.description ||
+          "",
 
 
-        description:
-        item.description ||
-        item.subtitle ||
-        item.location ||
-        "",
+          description:
+          item.description ||
+          item.subtitle ||
+          item.type ||
+          "",
 
 
-        type:
-        item.type ||
-        "place",
+          type:
+          item.type ||
+          "place",
 
 
-        id:
-        item.id ||
-        item.place_id ||
-        ""
+          id:
+          item.place_id ||
+          item.id ||
+          ""
 
 
-      }));
+        };
+
+
+      });
 
 
     }
@@ -136,14 +152,15 @@ export default async function handler(req, res) {
 
 
     console.error(
-      "Hotel autocomplete failed:",
+      "Maps autocomplete error:",
       error
     );
 
 
     return res.status(500).json({
 
-      error:"Server error"
+      error:
+      "Server error"
 
     });
 
