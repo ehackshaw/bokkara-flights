@@ -1,157 +1,173 @@
 export default async function handler(req, res) {
 
 
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "*"
-  );
+    // CORS
+    res.setHeader(
+        "Access-Control-Allow-Origin",
+        "*"
+    );
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, OPTIONS"
-  );
+    res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET, OPTIONS"
+    );
 
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
-
-
-  if(req.method === "OPTIONS"){
-    return res.status(200).end();
-  }
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
 
+    if(req.method === "OPTIONS"){
 
-  try {
-
-
-    const query = req.query.q;
-
-
-
-    if(!query || query.length < 2){
-
-      return res.status(200).json({
-        suggestions:[]
-      });
+        return res.status(200).end();
 
     }
 
 
 
-    const apiKey = process.env.SERPAPI_KEY;
+    try {
+
+
+        const query = req.query.q;
 
 
 
-    const params = new URLSearchParams({
+        if(!query || query.length < 3){
 
-      engine:"google_maps_autocomplete",
+            return res.status(200).json({
 
-      q:query,
+                suggestions:[]
 
-      hl:"en",
+            });
 
-      gl:"us",
-
-      ll:"@25.7617,-80.1918,10z",
-
-      api_key:apiKey
-
-    });
+        }
 
 
 
-    const response = await fetch(
-      "https://serpapi.com/search.json?" +
-      params.toString()
-    );
+        const apiKey = process.env.Maps_Platform_API_Key;
 
 
 
-    const data = await response.json();
+        if(!apiKey){
+
+            return res.status(500).json({
+
+                error:"Missing Google Maps API Key"
+
+            });
+
+        }
 
 
 
-    let suggestions = [];
+        const googleURL =
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json?"
+        +
+        new URLSearchParams({
+
+            input: query,
+
+            key: apiKey,
+
+            types: "geocode|establishment",
+
+            language:"en"
+
+        });
 
 
 
-    if(
-      Array.isArray(data.suggestions)
-    ){
-
-
-      suggestions =
-      data.suggestions.map(item=>{
-
-
-        return {
-
-
-          name:
-          item.value || "",
+        const response =
+        await fetch(googleURL);
 
 
 
-          description:
-          item.subtext || "",
+        const data =
+        await response.json();
 
 
 
-          type:
-          item.type || "place",
+        console.log(
+            "GOOGLE RESPONSE:",
+            JSON.stringify(data)
+        );
 
 
 
-          latitude:
-          item.latitude || "",
+        if(data.status !== "OK"){
+
+
+            return res.status(200).json({
+
+                suggestions:[],
+
+                status:data.status
+
+            });
+
+
+        }
 
 
 
-          longitude:
-          item.longitude || "",
+        const suggestions =
+        data.predictions.map(place=>({
+
+
+            name:
+            place.structured_formatting?.main_text
+            ||
+            place.description,
 
 
 
-          id:
-          item.data_id || ""
+            description:
+            place.structured_formatting?.secondary_text
+            ||
+            "",
 
-        };
 
 
-      });
+            place_id:
+            place.place_id,
+
+
+
+            full:
+            place.description
+
+
+
+        }));
+
+
+
+        return res.status(200).json({
+
+            suggestions
+
+        });
+
+
+
+    } catch(error){
+
+
+        console.error(
+            "Google autocomplete error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            error:"Server error"
+
+        });
 
 
     }
-
-
-
-    return res.status(200).json({
-
-      suggestions
-
-    });
-
-
-
-  } catch(error){
-
-
-    console.error(
-      "Autocomplete Error:",
-      error
-    );
-
-
-    return res.status(500).json({
-
-      error:"Server error"
-
-    });
-
-
-  }
 
 
 }
