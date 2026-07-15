@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
 
-  // CORS
   res.setHeader(
     "Access-Control-Allow-Origin",
     "*"
@@ -41,11 +40,10 @@ export default async function handler(req, res) {
     const apiKey = process.env.SERPAPI_KEY;
 
 
-
     if(!apiKey){
 
       return res.status(500).json({
-        error:"SERPAPI_KEY missing"
+        error:"Missing SERPAPI_KEY"
       });
 
     }
@@ -54,14 +52,11 @@ export default async function handler(req, res) {
 
     const params = new URLSearchParams({
 
-      engine:
-      "google_maps_autocomplete",
+      engine:"google_maps_autocomplete",
 
-      q:
-      query,
+      q:query,
 
-      api_key:
-      apiKey
+      api_key:apiKey
 
     });
 
@@ -79,7 +74,7 @@ export default async function handler(req, res) {
 
 
     console.log(
-      "MAP AUTOCOMPLETE:",
+      "FULL SERPAPI RESPONSE:",
       JSON.stringify(data)
     );
 
@@ -90,50 +85,81 @@ export default async function handler(req, res) {
 
 
     /*
-      Google Maps autocomplete usually returns:
-      suggestions
+      Google Maps autocomplete response parser
     */
 
 
     if(Array.isArray(data.suggestions)){
 
 
-      suggestions =
-      data.suggestions.map(item=>{
+      suggestions = data.suggestions.map(item=>({
+
+        name:
+        item.value ||
+        item.name ||
+        item.title ||
+        item.text ||
+        "",
 
 
-        return {
-
-          name:
-          item.value ||
-          item.name ||
-          item.title ||
-          item.description ||
-          "",
+        description:
+        item.description ||
+        item.subtitle ||
+        "",
 
 
-          description:
-          item.description ||
-          item.subtitle ||
-          item.type ||
-          "",
+        type:
+        item.type ||
+        "place",
 
 
-          type:
-          item.type ||
-          "place",
+        id:
+        item.place_id ||
+        item.id ||
+        ""
 
 
-          id:
-          item.place_id ||
-          item.id ||
-          ""
+      }));
+
+    }
 
 
-        };
+
+    /*
+      Backup if SerpAPI returns places
+    */
 
 
-      });
+    if(
+      suggestions.length === 0 &&
+      Array.isArray(data.places)
+    ){
+
+
+      suggestions = data.places.map(item=>({
+
+        name:
+        item.title ||
+        item.name ||
+        "",
+
+
+        description:
+        item.address ||
+        item.location ||
+        "",
+
+
+        type:
+        item.type ||
+        "place",
+
+
+        id:
+        item.place_id ||
+        ""
+
+      }));
 
 
     }
@@ -151,16 +177,12 @@ export default async function handler(req, res) {
   } catch(error){
 
 
-    console.error(
-      "Maps autocomplete error:",
-      error
-    );
+    console.error(error);
 
 
     return res.status(500).json({
 
-      error:
-      "Server error"
+      error:"Server error"
 
     });
 
