@@ -6,22 +6,6 @@ export default async function handler(req, res) {
     "*"
   );
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, OPTIONS"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
-
-
-  if(req.method === "OPTIONS"){
-    return res.status(200).end();
-  }
-
-
 
   try {
 
@@ -29,28 +13,7 @@ export default async function handler(req, res) {
     const query = req.query.q;
 
 
-
-    if(!query || query.length < 2){
-
-      return res.status(200).json({
-        suggestions:[]
-      });
-
-    }
-
-
-
     const apiKey = process.env.SERPAPI_KEY;
-
-
-
-    if(!apiKey){
-
-      return res.status(500).json({
-        error:"Missing SERPAPI_KEY"
-      });
-
-    }
 
 
 
@@ -60,16 +23,23 @@ export default async function handler(req, res) {
 
       q:query,
 
+      hl:"en",
+
+      gl:"us",
+
       api_key:apiKey
 
     });
 
 
 
-    const response = await fetch(
-      "https://serpapi.com/search.json?" +
-      params.toString()
-    );
+    const url =
+    "https://serpapi.com/search.json?" +
+    params.toString();
+
+
+
+    const response = await fetch(url);
 
 
 
@@ -78,102 +48,21 @@ export default async function handler(req, res) {
 
 
     console.log(
-      "SERPAPI RESPONSE:",
-      JSON.stringify(data)
+      JSON.stringify(data,null,2)
     );
 
 
 
-    let suggestions = [];
-
-
-
-    if(
-      data.suggestions &&
-      Array.isArray(data.suggestions)
-    ){
-
-
-      suggestions =
-      data.suggestions.map(item=>{
-
-
-        const place =
-        item.data || item;
-
-
-
-        return {
-
-
-          name:
-
-          place.title ||
-
-          place.name ||
-
-          place.value ||
-
-          "",
-
-
-
-          description:
-
-          place.subtitle ||
-
-          place.description ||
-
-          place.address ||
-
-          "",
-
-
-
-          type:
-
-          place.type ||
-
-          "place",
-
-
-
-          id:
-
-          place.place_id ||
-
-          ""
-
-        };
-
-
-      });
-
-
-    }
-
-
-
-    return res.status(200).json({
-
-      suggestions
-
-    });
+    return res.status(200).json(data);
 
 
 
   } catch(error){
 
 
-    console.error(
-      "AUTOCOMPLETE ERROR:",
-      error
-    );
-
-
     return res.status(500).json({
 
-      error:"Server error"
+      error:error.message
 
     });
 
