@@ -7,43 +7,14 @@ export default async function handler(req, res) {
   );
 
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, OPTIONS"
-  );
-
-
-  if(req.method === "OPTIONS"){
-    return res.status(200).end();
-  }
-
-
-
   try {
-
-
-    const query = req.query.q;
-
-
-    if(!query){
-
-      return res.status(200).json({
-        suggestions:[]
-      });
-
-    }
-
-
-
-    const apiKey = process.env.SERPAPI_KEY;
-
 
 
     const params = new URLSearchParams({
 
       engine:"google_maps_autocomplete",
 
-      q:query,
+      q:req.query.q,
 
       hl:"en",
 
@@ -51,15 +22,14 @@ export default async function handler(req, res) {
 
       ll:"@25.7617,-80.1918,10z",
 
-      api_key:apiKey
+      api_key:process.env.SERPAPI_KEY
 
     });
 
 
 
     const response = await fetch(
-      "https://serpapi.com/search.json?" +
-      params.toString()
+      "https://serpapi.com/search.json?" + params
     );
 
 
@@ -68,73 +38,15 @@ export default async function handler(req, res) {
 
 
 
-    console.log(
-      JSON.stringify(data,null,2)
-    );
-
-
-
-    let suggestions=[];
-
-
-
-    if(Array.isArray(data.suggestions)){
-
-
-      suggestions =
-      data.suggestions.map(item=>{
-
-
-        const place =
-        item.data || item;
-
-
-
-        return {
-
-          name:
-          place.title ||
-          place.name ||
-          "",
-
-
-          description:
-          place.subtitle ||
-          place.description ||
-          "",
-
-
-          id:
-          place.place_id ||
-          "",
-
-
-          type:
-          place.type ||
-          "place"
-
-        };
-
-
-      });
-
-
-    }
-
-
-
     return res.status(200).json({
 
-      suggestions
+      raw:data.suggestions
 
     });
 
 
 
   } catch(error){
-
-
-    console.error(error);
 
 
     return res.status(500).json({
@@ -145,6 +57,5 @@ export default async function handler(req, res) {
 
 
   }
-
 
 }
