@@ -436,26 +436,326 @@ console.log("CALENDAR CHEAPEST:", cheapest);
 
     }
 
+/*
+   NORMAL SINGLE SEARCH
+*/
+
+
+/*
+   ONE WAY
+*/
+
+if(type === "oneway"){
+
+
+const data =
+  await searchFlights(
+    departure_date
+  );
+
+
+return res.status(200).json({
+
+    departure_flights:[
+
+        ...(data.best_flights || []),
+
+        ...(data.other_flights || [])
+
+    ],
+
+
+    return_flights:[],
+
+
+    flight_details:data,
+
+
+    best_flights:
+        data.best_flights || [],
+
+
+    other_flights:
+        data.other_flights || [],
+
+
+    flights:[
+
+        ...(data.best_flights || []),
+
+        ...(data.other_flights || [])
+
+    ]
+
+});
+
+
+}
+
+
+
+/*
+   ROUND TRIP
+*/
+
+if(type === "roundtrip"){
+
+
+
+/*
+   SEARCH DEPARTURE
+
+   POS → JFK
+
+*/
+
+const departureData =
+await searchFlights(
+    departure_date
+);
 
 
 
 
-    /*
-       NORMAL SINGLE SEARCH
-    */
+
+/*
+   SEARCH RETURN
+
+   JFK → POS
+
+*/
+
+const originalOrigin = origin;
+
+const originalDestination = destination;
 
 
-    const data =
-      await searchFlights(
-        departure_date
-      );
+/*
+   Swap airports
+*/
+
+const temp =
+origin;
+
+
+/*
+   We cannot change const values,
+   so create new search function
+*/
+
+
+async function searchReturnFlights(){
+
+
+const params = new URLSearchParams();
 
 
 
-    return res.status(200).json(data);
+params.set(
+"engine",
+"google_flights"
+);
 
 
 
+params.set(
+"departure_id",
+originalDestination
+);
+
+
+
+params.set(
+"arrival_id",
+originalOrigin
+);
+
+
+
+params.set(
+"outbound_date",
+return_date
+);
+
+
+
+params.set(
+"currency",
+"USD"
+);
+
+
+
+params.set(
+"hl",
+"en"
+);
+
+
+
+params.set(
+"gl",
+"us"
+);
+
+
+
+params.set(
+"deep_search",
+"true"
+);
+
+
+
+params.set(
+"show_hidden",
+"true"
+);
+
+
+
+params.set(
+"sort_by",
+"2"
+);
+
+
+
+params.set(
+"type",
+"1"
+);
+
+
+
+params.set(
+"return_date",
+departure_date
+);
+
+
+
+params.set(
+"adults",
+adults
+);
+
+
+
+params.set(
+"api_key",
+process.env.SERPAPI_KEY
+);
+
+
+
+const url =
+`https://serpapi.com/search.json?${params.toString()}`;
+
+
+
+const response =
+await fetch(url);
+
+
+
+if(!response.ok){
+
+throw new Error(
+"Return flight search failed"
+);
+
+}
+
+
+return await response.json();
+
+
+}
+
+
+
+
+
+const returnData =
+await searchReturnFlights();
+
+
+
+
+
+return res.status(200).json({
+
+
+
+departure_flights:[
+
+    ...(departureData.best_flights || []),
+
+    ...(departureData.other_flights || [])
+
+],
+
+
+
+
+return_flights:[
+
+    ...(returnData.best_flights || []),
+
+    ...(returnData.other_flights || [])
+
+],
+
+
+
+
+flight_details:{
+
+
+departure:departureData,
+
+
+return:returnData
+
+
+},
+
+
+
+
+/*
+ keep old structure
+ so nothing else breaks
+*/
+
+
+best_flights:
+
+departureData.best_flights || [],
+
+
+
+other_flights:
+
+departureData.other_flights || [],
+
+
+
+flights:[
+
+    ...(departureData.best_flights || []),
+
+    ...(departureData.other_flights || [])
+
+]
+
+
+
+});
+
+
+}
 
   } catch(err){
 
