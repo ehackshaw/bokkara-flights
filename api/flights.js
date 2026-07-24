@@ -1,573 +1,667 @@
 export default async function handler(req, res) {
 
 
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "*"
-  );
+res.setHeader(
+"Access-Control-Allow-Origin",
+"*"
+);
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "POST, OPTIONS"
-  );
 
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
+res.setHeader(
+"Access-Control-Allow-Methods",
+"POST, OPTIONS"
+);
 
 
-  if(req.method === "OPTIONS"){
+res.setHeader(
+"Access-Control-Allow-Headers",
+"Content-Type"
+);
 
-    return res.status(200).end();
 
-  }
 
+if(req.method === "OPTIONS"){
 
+return res.status(200).end();
 
-  if(req.method !== "POST"){
+}
 
-    return res.status(405).json({
 
-      error:"POST only"
 
-    });
+if(req.method !== "POST"){
 
-  }
+return res.status(405).json({
 
+error:"POST only"
 
+});
 
-  try{
+}
 
 
-    const body = req.body || {};
 
+try{
 
-    console.log(
-      "🔥 Incoming request:",
-      body
-    );
 
+const body = req.body || {};
 
 
-    function normalizeTrip(type){
 
-      if(!type) return "oneway";
+console.log(
+"🔥 Incoming request:",
+body
+);
 
 
-      return String(type)
-      .toLowerCase()
-      .includes("round")
-      ? "roundtrip"
-      : "oneway";
 
-    }
 
+function normalizeTrip(type){
 
+if(!type)
+return "oneway";
 
-    function normalizeInt(value,fallback=1){
 
-      const n =
-      parseInt(
-        String(value)
-        .replace(/\D/g,"")
-      );
+return String(type)
+.toLowerCase()
+.includes("round")
+?
+"roundtrip"
+:
+"oneway";
 
+}
 
-      return isNaN(n) || n<=0
-      ? fallback
-      : n;
 
-    }
 
 
+function normalizeInt(value,fallback=1){
 
-    function addDays(date,days){
+const n =
+parseInt(
+String(value)
+.replace(/\D/g,"")
+);
 
-      const d =
-      new Date(date);
 
+return isNaN(n) || n<=0
+?
+fallback
+:
+n;
 
-      d.setDate(
-        d.getDate()+days
-      );
+}
 
 
-      return d
-      .toISOString()
-      .split("T")[0];
 
-    }
 
 
+function addDays(date,days){
 
+const d =
+new Date(date);
 
-    const origin =
-    String(body.origin || "")
-    .trim()
-    .toUpperCase();
 
+d.setDate(
+d.getDate()+days
+);
 
 
-    const destination =
-    String(body.destination || "")
-    .trim()
-    .toUpperCase();
+return d
+.toISOString()
+.split("T")[0];
 
+}
 
 
-    const departure_date =
-    body.departure_date;
 
 
 
-    const return_date =
-    body.return_date;
+const origin =
 
+String(body.origin || "")
+.trim()
+.toUpperCase();
 
 
-    const tripType =
-    normalizeTrip(body.type);
 
+const destination =
 
+String(body.destination || "")
+.trim()
+.toUpperCase();
 
-    const adults =
-    normalizeInt(
-      body.adults,
-      1
-    );
 
 
 
-    if(
-      !origin ||
-      !destination ||
-      !departure_date
-    ){
+const departure_date =
+body.departure_date;
 
-      return res.status(400).json({
 
-        error:"Missing required fields",
 
-        received:body
+const return_date =
+body.return_date;
 
-      });
 
-    }
 
 
+const tripType =
+normalizeTrip(body.type);
 
 
 
-    /*
-      GOOGLE FLIGHTS SEARCH
-    */
 
+const adults =
+normalizeInt(
+body.adults,
+1
+);
 
-    async function searchFlights({
 
-      from,
 
-      to,
 
-      date
 
-    }){
+if(
+!origin ||
+!destination ||
+!departure_date
+){
 
 
-      const params =
-      new URLSearchParams();
+return res.status(400).json({
 
+error:"Missing required fields",
 
+received:body
 
-      params.set(
-        "engine",
-        "google_flights"
-      );
+});
 
 
+}
 
-      params.set(
-        "departure_id",
-        from
-      );
 
 
 
-      params.set(
-        "arrival_id",
-        to
-      );
 
+/*
+ GOOGLE FLIGHTS SEARCH
+*/
 
 
-      params.set(
-        "outbound_date",
-        date
-      );
+async function searchFlights({
 
+from,
 
+to,
 
-      params.set(
-        "currency",
-        "USD"
-      );
+date,
 
+returnDate
 
+}){
 
-      params.set(
-        "hl",
-        "en"
-      );
 
+const params =
+new URLSearchParams();
 
 
-      params.set(
-        "gl",
-        "us"
-      );
 
+params.set(
+"engine",
+"google_flights"
+);
 
 
-      params.set(
-        "deep_search",
-        "true"
-      );
 
+params.set(
+"departure_id",
+from
+);
 
 
-      params.set(
-        "show_hidden",
-        "true"
-      );
 
+params.set(
+"arrival_id",
+to
+);
 
 
-      params.set(
-        "sort_by",
-        "2"
-      );
 
+params.set(
+"outbound_date",
+date
+);
 
 
-      params.set(
-        "type",
-        "2"
-      );
 
 
+// ROUND TRIP
 
-      params.set(
-        "adults",
-        adults
-      );
+if(returnDate){
 
 
+params.set(
+"return_date",
+returnDate
+);
 
-      params.set(
-        "api_key",
-        process.env.SERPAPI_KEY
-      );
 
+params.set(
+"type",
+"1"
+);
 
 
-      const url =
-      `https://serpapi.com/search.json?${params.toString()}`;
+}
 
 
+// ONE WAY
 
-      console.log(
-        "Searching:",
-        from,
-        "→",
-        to,
-        date
-      );
+else{
 
 
+params.set(
+"type",
+"2"
+);
 
-      const response =
-      await fetch(url);
 
+}
 
 
-      if(!response.ok){
 
-        throw new Error(
-          "SerpAPI error " +
-          response.status
-        );
 
-      }
+params.set(
+"currency",
+"USD"
+);
 
 
 
-      return await response.json();
+params.set(
+"hl",
+"en"
+);
 
 
-    }
 
+params.set(
+"gl",
+"us"
+);
 
 
 
+params.set(
+"deep_search",
+"true"
+);
 
-    function extractFlights(data){
 
 
-      return [
+params.set(
+"show_hidden",
+"true"
+);
 
-        ...(data.best_flights || []),
 
-        ...(data.other_flights || []),
 
-        ...(data.flights || [])
+params.set(
+"sort_by",
+"2"
+);
 
-      ];
 
 
-    }
+params.set(
+"adults",
+adults
+);
 
 
 
+params.set(
+"api_key",
+process.env.SERPAPI_KEY
+);
 
 
 
 
-    /*
-      FLEXIBLE DATE SEARCH
-    */
 
+const url =
 
-    if(body.flexible_dates === true){
+`https://serpapi.com/search.json?${params.toString()}`;
 
 
 
-      const dates=[];
 
 
+console.log(
+"Searching:",
+from,
+"→",
+to,
+date,
+returnDate || ""
+);
 
-      for(
-        let i=0;
-        i<(body.days || 7);
-        i++
-      ){
 
-        dates.push(
-          addDays(
-            departure_date,
-            i
-          )
-        );
 
-      }
 
 
+const response =
+await fetch(url);
 
 
-      const searches =
-      await Promise.all(
 
-        dates.map(date=>
 
-          searchFlights({
+if(!response.ok){
 
-            from:origin,
+throw new Error(
+"SerpAPI error " +
+response.status
+);
 
-            to:destination,
+}
 
-            date
 
-          })
 
-        )
 
-      );
+return await response.json();
 
 
 
-      const calendar =
-      searches.map(
-        (result,index)=>{
+}
 
 
-          const flights =
-          extractFlights(result);
 
 
 
-          flights.sort(
-            (a,b)=>
-            Number(a.price || 0)
-            -
-            Number(b.price || 0)
-          );
 
+function extractFlights(data){
 
 
-          return {
+return [
 
-            date:
-            dates[index],
+...(data.best_flights || []),
 
+...(data.other_flights || []),
 
-            price:
-            flights[0]?.price || null,
+...(data.flights || [])
 
+];
 
-            flights
 
-          };
+}
 
 
-        }
 
-      );
 
 
 
-      return res.status(200).json({
 
-        departure:
-        extractFlights(searches[0]),
+/*
+ FLEXIBLE DATE SEARCH
+*/
 
 
-        return:[],
+if(body.flexible_dates === true){
 
 
-        calendar
 
+const dates=[];
 
-      });
 
 
-    }
+for(
+let i=0;
+i<(body.days || 7);
+i++
+){
 
 
+dates.push(
 
+addDays(
+departure_date,
+i
+)
 
+);
 
 
+}
 
-    /*
-      NORMAL SEARCH
-    */
 
 
 
-    const departureData =
-    await searchFlights({
+const searches =
 
-      from:origin,
+await Promise.all(
 
-      to:destination,
+dates.map(date=>
 
-      date:departure_date
 
-    });
+searchFlights({
 
+from:origin,
 
+to:destination,
 
-    const departureFlights =
-    extractFlights(
-      departureData
-    );
+date,
 
+returnDate:
+tripType==="roundtrip"
+?
+return_date
+:
+null
 
 
+})
 
-    let returnFlights=[];
 
+)
 
 
+);
 
-    if(
-      tripType==="roundtrip" &&
-      return_date
-    ){
 
 
 
-      const returnData =
-      await searchFlights({
 
-        from:destination,
 
-        to:origin,
+const calendar =
 
-        date:return_date
+searches.map(
+(result,index)=>{
 
-      });
 
+const flights =
+extractFlights(result);
 
 
-      returnFlights =
-      extractFlights(
-        returnData
-      );
 
+flights.sort(
 
+(a,b)=>
 
-    }
+Number(a.price || 0)
 
+-
 
+Number(b.price || 0)
 
+);
 
 
 
-    console.log(
-      "Departure flights:",
-      departureFlights.length
-    );
+return {
 
 
-    console.log(
-      "Return flights:",
-      returnFlights.length
-    );
+date:
 
+dates[index],
 
 
+price:
 
+flights[0]?.price || null,
 
-    return res.status(200).json({
 
+flights
 
-      departure:
-      departureFlights,
+};
 
 
-      return:
-      returnFlights
 
+}
 
-    });
+);
 
 
 
 
 
-  }
-  catch(error){
 
+return res.status(200).json({
 
 
-    console.error(
-      "🔥 SERVER ERROR:",
-      error
-    );
+departure:
 
+extractFlights(searches[0]),
 
 
-    return res.status(500).json({
+return:
 
-      error:"Server crashed",
+extractFlights(searches[0]),
 
-      message:error.message
 
-    });
+calendar
 
 
-  }
+
+});
+
+
+
+}
+
+
+
+
+
+
+
+
+/*
+ NORMAL SEARCH
+*/
+
+
+
+const flightData =
+
+await searchFlights({
+
+
+from:origin,
+
+
+to:destination,
+
+
+date:departure_date,
+
+
+returnDate:
+
+tripType==="roundtrip"
+
+?
+
+return_date
+
+:
+
+null
+
+
+});
+
+
+
+
+
+const flights =
+
+extractFlights(
+flightData
+);
+
+
+
+
+
+console.log(
+"Round Trip Flights:",
+flights.length
+);
+
+
+
+
+
+
+return res.status(200).json({
+
+
+
+departure:
+
+flights,
+
+
+
+return:
+
+flights
+
+
+
+});
+
+
+
+
+
+
+}
+catch(error){
+
+
+
+console.error(
+"🔥 SERVER ERROR:",
+error
+);
+
+
+
+return res.status(500).json({
+
+
+error:"Server crashed",
+
+
+message:error.message
+
+
+});
+
+
+
+}
 
 
 }
