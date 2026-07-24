@@ -1,51 +1,82 @@
 export default async function handler(req, res) {
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "*"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "POST, OPTIONS"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type"
+  );
 
 
-  if (req.method === "OPTIONS") {
+  if(req.method === "OPTIONS"){
+
     return res.status(200).end();
+
   }
 
 
-  if (req.method !== "POST") {
+
+  if(req.method !== "POST"){
+
     return res.status(405).json({
+
       error:"POST only"
+
     });
+
   }
 
 
-  try {
+
+  try{
+
 
     const body = req.body || {};
 
-    console.log("🔥 Incoming request:", body);
+
+    console.log(
+      "🔥 Incoming request:",
+      body
+    );
 
 
 
-    function normalizeTrip(t){
+    function normalizeTrip(type){
 
-      if(!t) return "oneway";
+      if(!type) return "oneway";
 
-      t = String(t).toLowerCase();
 
-      return t.includes("round")
-        ? "roundtrip"
-        : "oneway";
+      return String(type)
+      .toLowerCase()
+      .includes("round")
+      ? "roundtrip"
+      : "oneway";
 
     }
 
 
 
-    function normalizeInt(v,fallback=1){
+    function normalizeInt(value,fallback=1){
 
-      const n=parseInt(String(v).replace(/\D/g,""));
+      const n =
+      parseInt(
+        String(value)
+        .replace(/\D/g,"")
+      );
+
 
       return isNaN(n) || n<=0
-        ? fallback
-        : n;
+      ? fallback
+      : n;
 
     }
 
@@ -53,46 +84,73 @@ export default async function handler(req, res) {
 
     function addDays(date,days){
 
-      const d=new Date(date);
+      const d =
+      new Date(date);
 
-      d.setDate(d.getDate()+days);
 
-      return d.toISOString().split("T")[0];
+      d.setDate(
+        d.getDate()+days
+      );
+
+
+      return d
+      .toISOString()
+      .split("T")[0];
 
     }
 
 
 
+
     const origin =
-      String(body.origin || "")
-      .trim()
-      .toUpperCase();
+    String(body.origin || "")
+    .trim()
+    .toUpperCase();
 
 
 
     const destination =
-      String(body.destination || "")
-      .trim()
-      .toUpperCase();
+    String(body.destination || "")
+    .trim()
+    .toUpperCase();
 
 
 
-    const departure_date = body.departure_date;
-
-    const return_date = body.return_date;
-
-
-    const type = normalizeTrip(body.type);
-
-    const adults = normalizeInt(body.adults,1);
+    const departure_date =
+    body.departure_date;
 
 
 
-    if(!origin || !destination || !departure_date){
+    const return_date =
+    body.return_date;
+
+
+
+    const tripType =
+    normalizeTrip(body.type);
+
+
+
+    const adults =
+    normalizeInt(
+      body.adults,
+      1
+    );
+
+
+
+    if(
+      !origin ||
+      !destination ||
+      !departure_date
+    ){
 
       return res.status(400).json({
+
         error:"Missing required fields",
+
         received:body
+
       });
 
     }
@@ -100,10 +158,25 @@ export default async function handler(req, res) {
 
 
 
-    async function searchFlights(date){
+
+    /*
+      GOOGLE FLIGHTS SEARCH
+    */
 
 
-      const params = new URLSearchParams();
+    async function searchFlights({
+
+      from,
+
+      to,
+
+      date
+
+    }){
+
+
+      const params =
+      new URLSearchParams();
 
 
 
@@ -113,16 +186,19 @@ export default async function handler(req, res) {
       );
 
 
+
       params.set(
         "departure_id",
-        origin
+        from
       );
+
 
 
       params.set(
         "arrival_id",
-        destination
+        to
       );
+
 
 
       params.set(
@@ -131,10 +207,12 @@ export default async function handler(req, res) {
       );
 
 
+
       params.set(
         "currency",
         "USD"
       );
+
 
 
       params.set(
@@ -143,10 +221,12 @@ export default async function handler(req, res) {
       );
 
 
+
       params.set(
         "gl",
         "us"
       );
+
 
 
       params.set(
@@ -155,10 +235,12 @@ export default async function handler(req, res) {
       );
 
 
+
       params.set(
         "show_hidden",
         "true"
       );
+
 
 
       params.set(
@@ -168,68 +250,10 @@ export default async function handler(req, res) {
 
 
 
-      /*
-        ROUND TRIP DATE FIX
-
-        Keeps return date valid when
-        flexible dates move departure.
-      */
-
-      if(type==="roundtrip"){
-
-
-        params.set(
-          "type",
-          "1"
-        );
-
-
-        let adjustedReturn = return_date;
-
-
-
-        if(
-          adjustedReturn &&
-          new Date(adjustedReturn) <= new Date(date)
-        ){
-
-
-          const newReturn =
-            new Date(date);
-
-
-          newReturn.setDate(
-            newReturn.getDate() + 1
-          );
-
-
-          adjustedReturn =
-            newReturn
-            .toISOString()
-            .split("T")[0];
-
-
-        }
-
-
-
-        params.set(
-          "return_date",
-          adjustedReturn
-        );
-
-
-
-      }else{
-
-
-        params.set(
-          "type",
-          "2"
-        );
-
-
-      }
+      params.set(
+        "type",
+        "2"
+      );
 
 
 
@@ -248,19 +272,30 @@ export default async function handler(req, res) {
 
 
       const url =
-        `https://serpapi.com/search.json?${params.toString()}`;
+      `https://serpapi.com/search.json?${params.toString()}`;
+
+
+
+      console.log(
+        "Searching:",
+        from,
+        "→",
+        to,
+        date
+      );
 
 
 
       const response =
-        await fetch(url);
+      await fetch(url);
 
 
 
       if(!response.ok){
 
         throw new Error(
-          "SerpAPI failed: " + response.status
+          "SerpAPI error " +
+          response.status
         );
 
       }
@@ -276,16 +311,35 @@ export default async function handler(req, res) {
 
 
 
+    function extractFlights(data){
+
+
+      return [
+
+        ...(data.best_flights || []),
+
+        ...(data.other_flights || []),
+
+        ...(data.flights || [])
+
+      ];
+
+
+    }
+
+
+
+
+
+
+
     /*
-       FLEXIBLE DATE SEARCH
+      FLEXIBLE DATE SEARCH
     */
 
 
     if(body.flexible_dates === true){
 
-
-
-      const calendar=[];
 
 
       const dates=[];
@@ -309,128 +363,147 @@ export default async function handler(req, res) {
 
 
 
+
       const searches =
-        await Promise.all(
-          dates.map(date =>
-            searchFlights(date)
-          )
-        );
+      await Promise.all(
+
+        dates.map(date=>
+
+          searchFlights({
+
+            from:origin,
+
+            to:destination,
+
+            date
+
+          })
+
+        )
+
+      );
 
 
 
-
-      searches.forEach(
+      const calendar =
+      searches.map(
         (result,index)=>{
 
 
-          const flights = [
-
-            ...(result.best_flights || []),
-
-            ...(result.other_flights || []),
-
-            ...(result.flights || [])
-
-          ];
+          const flights =
+          extractFlights(result);
 
 
 
           flights.sort(
             (a,b)=>
-              Number(a.price || 0) -
-              Number(b.price || 0)
+            Number(a.price || 0)
+            -
+            Number(b.price || 0)
           );
 
 
 
-          const cheapest =
-            flights[0];
-
-
-
-          let logo="";
-
-
-
-          if(cheapest?.flights?.[0]){
-
-
-            logo =
-              cheapest.flights[0]
-              .airline_logo || "";
-
-
-          }
-
-
-
-console.log("CALENDAR CHEAPEST:", cheapest);
-          calendar.push({
-
+          return {
 
             date:
-              dates[index],
+            dates[index],
 
 
             price:
-  cheapest
-  ? (
-      cheapest.price ??
-      cheapest.total_price ??
-      cheapest.amount ??
-      cheapest?.price_details?.total ??
-      null
-    )
-  : null,
-
-
-            logo,
+            flights[0]?.price || null,
 
 
             flights
 
-
-          });
-
+          };
 
 
-        });
+        }
 
-
-        const main =
-          searches[0];
+      );
 
 
 
-        return res.status(200).json({
+      return res.status(200).json({
+
+        departure:
+        extractFlights(searches[0]),
 
 
-          best_flights:
-            main.best_flights || [],
+        return:[],
 
 
-
-          other_flights:
-            main.other_flights || [],
+        calendar
 
 
+      });
 
-          flights:
-            [
-              ...(main.best_flights || []),
 
-              ...(main.other_flights || []),
-
-              ...(main.flights || [])
-            ],
+    }
 
 
 
-          calendar
 
 
 
-        });
+
+    /*
+      NORMAL SEARCH
+    */
+
+
+
+    const departureData =
+    await searchFlights({
+
+      from:origin,
+
+      to:destination,
+
+      date:departure_date
+
+    });
+
+
+
+    const departureFlights =
+    extractFlights(
+      departureData
+    );
+
+
+
+
+    let returnFlights=[];
+
+
+
+
+    if(
+      tripType==="roundtrip" &&
+      return_date
+    ){
+
+
+
+      const returnData =
+      await searchFlights({
+
+        from:destination,
+
+        to:origin,
+
+        date:return_date
+
+      });
+
+
+
+      returnFlights =
+      extractFlights(
+        returnData
+      );
 
 
 
@@ -440,47 +513,61 @@ console.log("CALENDAR CHEAPEST:", cheapest);
 
 
 
-    /*
-       NORMAL SINGLE SEARCH
-    */
+
+    console.log(
+      "Departure flights:",
+      departureFlights.length
+    );
 
 
-    const data =
-      await searchFlights(
-        departure_date
-      );
-
-
-
-    return res.status(200).json(data);
-
+    console.log(
+      "Return flights:",
+      returnFlights.length
+    );
 
 
 
-  } catch(err){
+
+
+    return res.status(200).json({
+
+
+      departure:
+      departureFlights,
+
+
+      return:
+      returnFlights
+
+
+    });
+
+
+
+
+
+  }
+  catch(error){
+
 
 
     console.error(
       "🔥 SERVER ERROR:",
-      err
+      error
     );
 
 
 
     return res.status(500).json({
 
+      error:"Server crashed",
 
-      error:
-        "Server crashed",
-
-
-      message:
-        err.message
-
+      message:error.message
 
     });
 
 
   }
+
 
 }
