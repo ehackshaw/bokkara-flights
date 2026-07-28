@@ -48,6 +48,7 @@ Number(body.adults || 1);
 
 
 
+
 async function serpSearch(params){
 
 
@@ -147,6 +148,7 @@ return json;
 
 
 
+
 function normalizeLeg(flight, price, leg){
 
 
@@ -154,8 +156,10 @@ const segments =
 flight.flights || [];
 
 
+
 const first =
 segments[0] || {};
+
 
 
 const last =
@@ -166,7 +170,8 @@ segments[segments.length - 1] || {};
 return {
 
 
-id:Date.now()+Math.random(),
+id:
+Date.now()+Math.random(),
 
 
 price:price,
@@ -175,6 +180,7 @@ price:price,
 airline:
 first.airline ||
 "Airline",
+
 
 
 airline_logo:
@@ -220,10 +226,13 @@ flights:segments,
 
 leg:leg
 
+
 };
 
 
 }
+
+
 
 
 
@@ -270,6 +279,9 @@ error:"Missing flight fields"
 
 
 
+
+
+
 /*
 ====================================
 ROUND TRIP SEARCH
@@ -305,6 +317,7 @@ departure_date
 
 if(return_date){
 
+
 params.set(
 "return_date",
 return_date
@@ -331,8 +344,11 @@ params.set(
 
 
 
+
 const searchData =
 await serpSearch(params);
+
+
 
 
 
@@ -340,6 +356,7 @@ console.log(
 "RAW ROUND TRIP RESPONSE",
 JSON.stringify(searchData,null,2)
 );
+
 
 
 
@@ -361,7 +378,9 @@ let returnFlights = [];
 
 
 
-itineraries.forEach((flight,index)=>{
+
+
+itineraries.forEach((flight)=>{
 
 
 const totalPrice =
@@ -369,58 +388,94 @@ flight.price || 0;
 
 
 
-const segments =
-flight.flights || [];
+
+let outboundSegments =
+flight.flights ||
+flight.outbound_flights ||
+[];
 
 
 
-if(!segments.length){
 
-return;
+let returnSegments =
+flight.return_flights ||
+flight.inbound_flights ||
+[];
+
+
+
+
+
+/*
+====================================
+HANDLE COMBINED FLIGHT ARRAYS
+====================================
+*/
+
+
+if(
+!returnSegments.length &&
+outboundSegments.length
+){
+
+
+let splitPoint =
+outboundSegments.findIndex(
+(segment)=>
+segment.departure_airport?.id === destination
+);
+
+
+
+if(splitPoint > -1){
+
+
+returnSegments =
+outboundSegments.slice(splitPoint);
+
+
+
+outboundSegments =
+outboundSegments.slice(0,splitPoint);
+
+
+
+}
+
 
 }
 
 
 
-const outbound = {
-
-flights:segments.filter(
-(segment)=>
-segment.departure_airport?.id === origin
-),
-
-
-total_duration:
-flight.total_duration
-
-};
 
 
 
-const inbound = {
-
-flights:segments.filter(
-(segment)=>
-segment.departure_airport?.id === destination
-),
-
-
-total_duration:
-flight.total_duration
-
-};
+/*
+====================================
+CREATE DEPARTURE CARD
+====================================
+*/
 
 
-
-if(outbound.flights.length){
+if(outboundSegments.length){
 
 
 departureFlights.push(
+
 normalizeLeg(
-outbound,
+
+{
+flights:outboundSegments,
+total_duration:flight.total_duration
+
+},
+
 totalPrice,
+
 "departure"
+
 )
+
 );
 
 
@@ -428,23 +483,45 @@ totalPrice,
 
 
 
-if(inbound.flights.length){
+
+
+
+/*
+====================================
+CREATE RETURN CARD
+====================================
+*/
+
+
+if(returnSegments.length){
 
 
 returnFlights.push(
+
 normalizeLeg(
-inbound,
+
+{
+flights:returnSegments,
+total_duration:flight.total_duration
+
+},
+
 totalPrice,
+
 "return"
+
 )
+
 );
 
 
 }
+
 
 
 
 });
+
 
 
 
@@ -464,6 +541,8 @@ returnFlights.length
 
 
 
+
+
 return res.status(200).json({
 
 departure:departureFlights,
@@ -471,6 +550,7 @@ departure:departureFlights,
 return:returnFlights
 
 });
+
 
 
 
