@@ -16,9 +16,11 @@ res.setHeader(
 );
 
 
+
 if(req.method==="OPTIONS"){
 return res.status(200).end();
 }
+
 
 
 if(req.method!=="POST"){
@@ -28,6 +30,7 @@ error:"POST only"
 });
 
 }
+
 
 
 try{
@@ -96,10 +99,12 @@ process.env.SERPAPI_KEY
 
 
 
+
 const url =
 "https://serpapi.com/search.json?"
 +
 params.toString();
+
 
 
 
@@ -110,6 +115,7 @@ process.env.SERPAPI_KEY,
 "HIDDEN"
 )
 );
+
 
 
 
@@ -141,6 +147,7 @@ throw new Error(
 }
 
 
+
 return json;
 
 
@@ -151,7 +158,10 @@ return json;
 
 
 
-function normalizeLeg(flight, price, leg){
+
+
+
+function normalizeLeg(flight,price,leg){
 
 
 const segments =
@@ -165,7 +175,8 @@ segments[0] || {};
 
 
 const last =
-segments[segments.length - 1] || {};
+segments[segments.length-1] || {};
+
 
 
 
@@ -193,6 +204,7 @@ first.airline_logo ||
 
 
 
+
 departure_airport:{
 
 
@@ -204,6 +216,7 @@ time:
 first.departure_airport?.time || ""
 
 },
+
 
 
 
@@ -221,12 +234,14 @@ last.arrival_airport?.time || ""
 
 
 
+
 duration:
 flight.total_duration || 0,
 
 
 
 flights:segments,
+
 
 
 leg:leg
@@ -236,6 +251,10 @@ leg:leg
 
 
 }
+
+
+
+
 
 
 
@@ -266,6 +285,8 @@ body.return_date;
 
 
 
+
+
 if(
 !origin ||
 !destination ||
@@ -285,11 +306,15 @@ error:"Missing flight fields"
 
 
 
+
+
+
 /*
 ====================================
 GOOGLE FLIGHTS ROUND TRIP SEARCH
 ====================================
 */
+
 
 
 const params =
@@ -318,6 +343,7 @@ departure_date
 
 
 
+
 if(return_date){
 
 
@@ -327,13 +353,16 @@ return_date
 );
 
 
+
 params.set(
 "type",
 "1"
 );
 
 
-}else{
+
+}
+else{
 
 
 params.set(
@@ -347,6 +376,8 @@ params.set(
 
 
 
+
+
 const searchData =
 await serpSearch(params);
 
@@ -355,9 +386,10 @@ await serpSearch(params);
 
 
 console.log(
-"RAW ROUND TRIP RESPONSE:",
-JSON.stringify(searchData,null,2)
+"RAW GOOGLE FLIGHTS RESPONSE RECEIVED"
 );
+
+
 
 
 
@@ -375,9 +407,13 @@ const itineraries = [
 
 
 
-let departureFlights = [];
 
-let returnFlights = [];
+
+let departureFlights=[];
+
+let returnFlights=[];
+
+
 
 
 
@@ -387,12 +423,13 @@ let returnFlights = [];
 itineraries.forEach((flight)=>{
 
 
+
 const totalPrice =
 flight.price || 0;
 
 
 
-const segments =
+let segments =
 flight.flights || [];
 
 
@@ -406,36 +443,67 @@ return;
 
 
 
-let outbound = [];
 
-let inbound = [];
+let outbound=[];
 
-let returnStarted = false;
-
+let inbound=[];
 
 
 
+let returnStarted=false;
 
-segments.forEach(segment=>{
+
+
+
+
+
+/*
+====================================
+SPLIT OUTBOUND / RETURN
+====================================
+*/
+
+
+segments.forEach((segment,index)=>{
+
+
+
+/*
+If a flight arrives at destination,
+the next segment starts the return journey
+*/
 
 
 if(
-segment.departure_airport?.id === destination
+segment.arrival_airport?.id === destination
 ){
 
-returnStarted = true;
+outbound.push(segment);
+
+
+returnStarted=true;
+
+
+return;
 
 }
 
 
 
+
+
 if(returnStarted){
+
 
 inbound.push(segment);
 
-}else{
+
+}
+else{
+
 
 outbound.push(segment);
+
 
 }
 
@@ -447,8 +515,14 @@ outbound.push(segment);
 
 
 
+
+
+
+
 /*
-Fallback if SerpAPI separates legs
+====================================
+SERPAPI ALTERNATE FORMAT
+====================================
 */
 
 
@@ -459,6 +533,7 @@ flight.return_flights.length
 
 inbound =
 flight.return_flights;
+
 
 }
 
@@ -472,11 +547,21 @@ flight.inbound_flights.length
 inbound =
 flight.inbound_flights;
 
+
 }
 
 
 
 
+
+
+
+
+/*
+====================================
+CREATE DEPARTURE
+====================================
+*/
 
 
 if(outbound.length){
@@ -507,6 +592,14 @@ totalPrice,
 
 
 
+
+/*
+====================================
+CREATE RETURN
+====================================
+*/
+
+
 if(inbound.length){
 
 
@@ -533,8 +626,9 @@ totalPrice,
 
 
 
-
 });
+
+
 
 
 
@@ -559,6 +653,8 @@ returnFlights.length
 
 
 
+
+
 return res.status(200).json({
 
 departure:departureFlights,
@@ -566,6 +662,7 @@ departure:departureFlights,
 return:returnFlights
 
 });
+
 
 
 
