@@ -46,11 +46,11 @@ try{
 const body=req.body || {};
 
 
-
 console.log(
 "🔥 Incoming request:",
 body
 );
+
 
 
 
@@ -81,7 +81,9 @@ body.return_date;
 
 
 const adults =
+
 parseInt(body.adults || 1);
+
 
 
 
@@ -104,15 +106,15 @@ received:body
 
 
 
+
 /*
-========================
-SERPAPI GOOGLE FLIGHTS
-========================
+=========================
+SEARCH GOOGLE FLIGHTS
+=========================
 */
 
 
 async function searchFlights(){
-
 
 
 const params =
@@ -177,7 +179,6 @@ params.set(
 
 
 
-
 params.set(
 "currency",
 "USD"
@@ -235,7 +236,6 @@ process.env.SERPAPI_KEY
 
 
 
-
 const url =
 
 `https://serpapi.com/search.json?${params.toString()}`;
@@ -248,7 +248,7 @@ origin,
 "→",
 destination,
 departure_date,
-return_date
+return_date || ""
 );
 
 
@@ -278,9 +278,9 @@ return await response.json();
 
 
 /*
-========================
-FORMAT FLIGHTS
-========================
+=========================
+FORMAT SERPAPI RESPONSE
+=========================
 */
 
 
@@ -290,42 +290,71 @@ function formatFlight(flight){
 
 const segments =
 
-(flight.flights || []).map(segment=>({
+(flight.flights || []).map(segment=>{
+
+
+return {
 
 
 airline:
+
 segment.airline || "",
 
 
+
+logo:
+
+segment.airline_logo || flight.airline_logo || "",
+
+
+
 flight_number:
+
 segment.flight_number || "",
 
 
+
 aircraft:
-segment.airplane || "",
+
+segment.airplane ||
+segment.aircraft ||
+"",
+
 
 
 from:
+
 segment.departure_airport?.id || "",
 
 
+
 to:
+
 segment.arrival_airport?.id || "",
 
 
+
 departure:
+
 segment.departure_airport?.time || "",
 
 
+
 arrival:
+
 segment.arrival_airport?.time || "",
 
 
+
 duration:
+
 segment.duration || 0
 
 
-}));
+};
+
+
+});
 
 
 
@@ -335,13 +364,16 @@ return {
 
 
 id:
+
 flight.departure_token || "",
 
 
 
 airline:
 
-flight.flights?.[0]?.airline ||
+segments[0]?.airline ||
+
+flight.airline ||
 
 "Airline",
 
@@ -350,6 +382,8 @@ flight.flights?.[0]?.airline ||
 logo:
 
 flight.airline_logo ||
+
+segments[0]?.logo ||
 
 "",
 
@@ -361,7 +395,7 @@ flight.price || 0,
 
 
 
-type:
+trip_type:
 
 flight.type || "Round trip",
 
@@ -379,7 +413,7 @@ segments.length > 1
 
 ?
 
-`${segments.length-1} Stop`
+`${segments.length - 1} Stop`
 
 :
 
@@ -404,6 +438,7 @@ await searchFlights();
 
 
 
+
 console.log(
 "SERPAPI KEYS:",
 Object.keys(flightData)
@@ -415,22 +450,22 @@ Object.keys(flightData)
 
 const rawFlights = [
 
-
 ...(flightData.best_flights || []),
 
-
 ...(flightData.other_flights || [])
-
 
 ];
 
 
 
 
+
 console.log(
-"TOTAL RAW FLIGHTS:",
+"RAW FLIGHTS:",
 rawFlights.length
 );
+
+
 
 
 
@@ -445,14 +480,23 @@ formatFlight
 
 
 
-/*
-RETURN SAME DATA
-BECAUSE GOOGLE FLIGHTS
-ROUNDTRIP PRICE IS TOTAL
-*/
+
+console.log(
+"FORMATTED FLIGHTS:",
+JSON.stringify(
+flights[0],
+null,
+2
+)
+);
+
+
+
+
+
+
 
 return res.status(200).json({
-
 
 
 departure:
@@ -467,9 +511,7 @@ flights,
 
 
 
-calendar:
-
-[]
+calendar:[]
 
 
 
@@ -490,9 +532,11 @@ error
 
 return res.status(500).json({
 
+
 error:"Server crashed",
 
 message:error.message
+
 
 });
 
