@@ -1,5 +1,3 @@
-ok lets try it your way. tell me what to do here 
-
 export default async function handler(req, res) {
 
 
