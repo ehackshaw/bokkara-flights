@@ -189,8 +189,7 @@ id:index,
 
 
 price:
-
-Number(flight.price || 0),
+flight.price || 0,
 
 
 
@@ -250,17 +249,7 @@ flight.total_duration || 0,
 
 flights:
 
-segments,
-
-
-
-/*
-RETURN LEG FROM SERPAPI
-*/
-
-return_flights:
-
-flight.return_flights || []
+segments
 
 
 };
@@ -270,7 +259,6 @@ flight.return_flights || []
 
 
 }
-
 
 
 
@@ -301,7 +289,6 @@ body.return_date;
 
 
 
-
 if(
 !origin ||
 !destination ||
@@ -319,233 +306,139 @@ error:"Missing flight fields"
 
 
 
-
 /*
 ====================================
-ROUND TRIP SEARCH
-ORIGIN → DESTINATION → ORIGIN
+DEPARTURE SEARCH
+ORIGIN → DESTINATION
 ====================================
 */
 
 
-const flightParams =
+const departureParams =
 new URLSearchParams();
 
 
 
-flightParams.set(
+departureParams.set(
 "departure_id",
 origin
 );
 
 
 
-flightParams.set(
+departureParams.set(
 "arrival_id",
 destination
 );
 
 
 
-flightParams.set(
+departureParams.set(
 "outbound_date",
 departure_date
 );
 
 
 
+departureParams.set(
+"type",
+"2"
+);
+
+
+
+const departureData =
+await serpSearch(departureParams);
+
+
+
+
+const departureFlights =
+normalizeFlights(
+departureData
+);
+
+
+
+
+
+
+/*
+====================================
+RETURN SEARCH
+DESTINATION → ORIGIN
+====================================
+*/
+
+
+let returnFlights = [];
+
+
+
 if(return_date){
 
-flightParams.set(
-"return_date",
+
+
+const returnParams =
+new URLSearchParams();
+
+
+
+returnParams.set(
+"departure_id",
+destination
+);
+
+
+
+returnParams.set(
+"arrival_id",
+origin
+);
+
+
+
+returnParams.set(
+"outbound_date",
 return_date
 );
+
+
+
+returnParams.set(
+"type",
+"2"
+);
+
+
+
+const returnData =
+await serpSearch(returnParams);
+
+
+
+returnFlights =
+normalizeFlights(
+returnData
+);
+
 
 }
 
 
 
-/*
-TYPE 1 = ROUND TRIP
-*/
-
-flightParams.set(
-"type",
-"1"
-);
-
-
-
-
-const flightData =
-await serpSearch(
-flightParams
-);
-
-
-
-
-
-const roundTripFlights =
-normalizeFlights(
-flightData
-);
-
-
 
 
 
 console.log(
-"ROUND TRIP RESULTS:",
-roundTripFlights.length
-);
-
-
-
-
-
-
-/*
-====================================
-DEPARTURE CARDS
-ORIGIN → DESTINATION
-SHOW TOTAL ROUND TRIP PRICE
-====================================
-*/
-
-
-const departureFlights = roundTripFlights.map((flight,index)=>{
-
-
-return {
-
-
-...flight,
-
-
-id:index,
-
-
-direction:"departure",
-
-
-price:flight.price
-
-
-};
-
-
-});
-
-
-
-
-
-
-
-/*
-====================================
-RETURN CARDS
-DESTINATION → ORIGIN
-SHOW TOTAL ROUND TRIP PRICE
-====================================
-*/
-
-
-const returnFlights = roundTripFlights.map((flight,index)=>{
-
-
-const returnSegment =
-flight.return_flights || [];
-
-
-
-const firstReturn =
-returnSegment[0] || {};
-
-
-
-const lastReturn =
-returnSegment[returnSegment.length - 1] || {};
-
-
-
-return {
-
-
-...flight,
-
-
-id:index,
-
-
-direction:"return",
-
-
-
-departure_airport:{
-
-
-id:
-
-firstReturn.departure_airport?.id || destination,
-
-
-time:
-
-firstReturn.departure_airport?.time || ""
-
-
-},
-
-
-
-arrival_airport:{
-
-
-id:
-
-lastReturn.arrival_airport?.id || origin,
-
-
-time:
-
-lastReturn.arrival_airport?.time || ""
-
-
-},
-
-
-
-price:
-
-flight.price,
-
-
-
-flights:
-
-returnSegment
-
-
-};
-
-
-});
-
-
-
-
-
-
-console.log(
-"DEPARTURE CARDS:",
+"DEPARTURES:",
 departureFlights.length
 );
 
 
+
 console.log(
-"RETURN CARDS:",
+"RETURNS:",
 returnFlights.length
 );
 
