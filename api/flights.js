@@ -559,20 +559,13 @@ calendar
 */
 
 
+const flightData = await searchFlights({
 
-const flightData =
+from: origin,
 
-await searchFlights({
+to: destination,
 
-
-from:origin,
-
-
-to:destination,
-
-
-date:departure_date,
-
+date: departure_date,
 
 returnDate:
 
@@ -586,26 +579,76 @@ return_date
 
 null
 
-
 });
 
 
 
 
 
-const flights =
+const flights = extractFlights(flightData);
 
-extractFlights(
-flightData
-);
 
+
+
+
+let returnFlights = [];
+
+
+
+// Extract return leg from roundtrip Google Flights response
+
+if(tripType==="roundtrip"){
+
+
+returnFlights = flights.map(flight=>{
+
+
+if(
+flight.flights &&
+flight.flights.length > 1
+){
+
+
+return {
+
+
+...flight,
+
+
+flights:[
+
+flight.flights[flight.flights.length - 1]
+
+]
+
+
+};
+
+
+}
+
+
+return flight;
+
+
+});
+
+
+}
 
 
 
 
 console.log(
-"Round Trip Flights:",
+"Departure Flights:",
 flights.length
+);
+
+
+
+console.log(
+"Return Flights:",
+returnFlights.length
 );
 
 
@@ -616,52 +659,15 @@ flights.length
 return res.status(200).json({
 
 
-
 departure:
 
 flights,
 
 
-
 return:
 
-flights
+returnFlights
 
 
 
 });
-
-
-
-
-
-
-}
-catch(error){
-
-
-
-console.error(
-"🔥 SERVER ERROR:",
-error
-);
-
-
-
-return res.status(500).json({
-
-
-error:"Server crashed",
-
-
-message:error.message
-
-
-});
-
-
-
-}
-
-
-}
