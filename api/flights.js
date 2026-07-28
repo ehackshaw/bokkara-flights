@@ -189,6 +189,7 @@ id:index,
 
 
 price:
+
 Number(flight.price || 0),
 
 
@@ -249,7 +250,17 @@ flight.total_duration || 0,
 
 flights:
 
-segments
+segments,
+
+
+
+/*
+RETURN LEG FROM SERPAPI
+*/
+
+return_flights:
+
+flight.return_flights || []
 
 
 };
@@ -355,8 +366,7 @@ return_date
 
 
 /*
-type 1 = ROUND TRIP
-type 2 = ONE WAY
+TYPE 1 = ROUND TRIP
 */
 
 flightParams.set(
@@ -395,39 +405,68 @@ roundTripFlights.length
 
 
 
+/*
+====================================
+DEPARTURE CARDS
+ORIGIN → DESTINATION
+SHOW TOTAL ROUND TRIP PRICE
+====================================
+*/
+
+
 const departureFlights = roundTripFlights.map((flight,index)=>{
 
 
 return {
 
+
 ...flight,
+
+
+id:index,
+
 
 direction:"departure",
 
-price:flight.price,
+
+price:flight.price
 
 
 };
 
+
 });
 
+
+
+
+
+
+
+/*
+====================================
+RETURN CARDS
+DESTINATION → ORIGIN
+SHOW TOTAL ROUND TRIP PRICE
+====================================
+*/
 
 
 const returnFlights = roundTripFlights.map((flight,index)=>{
 
 
 const returnSegment =
-flight.flights?.filter(
-(segment)=>{
+flight.return_flights || [];
 
-return (
-segment.departure_airport?.id === destination &&
-segment.arrival_airport?.id === origin
-);
 
-}
 
-);
+const firstReturn =
+returnSegment[0] || {};
+
+
+
+const lastReturn =
+returnSegment[returnSegment.length - 1] || {};
 
 
 
@@ -443,42 +482,73 @@ id:index,
 direction:"return",
 
 
+
 departure_airport:{
 
+
 id:
-returnSegment[0]?.departure_airport?.id || destination,
+
+firstReturn.departure_airport?.id || destination,
 
 
 time:
-returnSegment[0]?.departure_airport?.time || ""
+
+firstReturn.departure_airport?.time || ""
 
 
 },
+
 
 
 arrival_airport:{
 
+
 id:
-returnSegment[returnSegment.length-1]?.arrival_airport?.id || origin,
+
+lastReturn.arrival_airport?.id || origin,
 
 
 time:
-returnSegment[returnSegment.length-1]?.arrival_airport?.time || ""
+
+lastReturn.arrival_airport?.time || ""
 
 
 },
 
 
-price:flight.price,
+
+price:
+
+flight.price,
 
 
-flights:returnSegment
+
+flights:
+
+returnSegment
 
 
 };
 
 
 });
+
+
+
+
+
+
+console.log(
+"DEPARTURE CARDS:",
+departureFlights.length
+);
+
+
+console.log(
+"RETURN CARDS:",
+returnFlights.length
+);
+
 
 
 
