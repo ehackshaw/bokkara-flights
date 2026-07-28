@@ -189,7 +189,7 @@ id:index,
 
 
 price:
-flight.price || 0,
+Number(flight.price || 0),
 
 
 
@@ -265,6 +265,7 @@ segments
 
 
 
+
 const origin =
 String(body.origin || "")
 .trim()
@@ -289,6 +290,7 @@ body.return_date;
 
 
 
+
 if(
 !origin ||
 !destination ||
@@ -306,141 +308,88 @@ error:"Missing flight fields"
 
 
 
+
 /*
 ====================================
-DEPARTURE SEARCH
-ORIGIN → DESTINATION
+ROUND TRIP SEARCH
+ORIGIN → DESTINATION → ORIGIN
 ====================================
 */
 
 
-const departureParams =
+const flightParams =
 new URLSearchParams();
 
 
 
-departureParams.set(
+flightParams.set(
 "departure_id",
 origin
 );
 
 
 
-departureParams.set(
+flightParams.set(
 "arrival_id",
 destination
 );
 
 
 
-departureParams.set(
+flightParams.set(
 "outbound_date",
 departure_date
 );
 
 
 
-departureParams.set(
-"type",
-"2"
-);
-
-
-
-const departureData =
-await serpSearch(departureParams);
-
-
-
-
-const departureFlights =
-normalizeFlights(
-departureData
-);
-
-
-
-
-
-
-/*
-====================================
-RETURN SEARCH
-DESTINATION → ORIGIN
-====================================
-*/
-
-
-let returnFlights = [];
-
-
-
 if(return_date){
 
-
-
-const returnParams =
-new URLSearchParams();
-
-
-
-returnParams.set(
-"departure_id",
-destination
-);
-
-
-
-returnParams.set(
-"arrival_id",
-origin
-);
-
-
-
-returnParams.set(
-"outbound_date",
+flightParams.set(
+"return_date",
 return_date
 );
-
-
-
-returnParams.set(
-"type",
-"2"
-);
-
-
-
-const returnData =
-await serpSearch(returnParams);
-
-
-
-returnFlights =
-normalizeFlights(
-returnData
-);
-
 
 }
 
 
 
+/*
+type 1 = ROUND TRIP
+type 2 = ONE WAY
+*/
 
-
-
-console.log(
-"DEPARTURES:",
-departureFlights.length
+flightParams.set(
+"type",
+"1"
 );
 
 
 
-console.log(
-"RETURNS:",
-returnFlights.length
+
+const flightData =
+await serpSearch(
+flightParams
 );
+
+
+
+
+
+const roundTripFlights =
+normalizeFlights(
+flightData
+);
+
+
+
+
+
+console.log(
+"ROUND TRIP RESULTS:",
+roundTripFlights.length
+);
+
 
 
 
@@ -448,9 +397,19 @@ returnFlights.length
 
 return res.status(200).json({
 
-departure:departureFlights,
 
-return:returnFlights
+/*
+Same round trip price
+shown on departure and return cards
+*/
+
+departure:
+roundTripFlights,
+
+
+return:
+roundTripFlights
+
 
 });
 
