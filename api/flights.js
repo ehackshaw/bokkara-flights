@@ -1,3 +1,5 @@
+ok lets try it your way. tell me what to do here 
+
 export default async function handler(req, res) {
 
 
@@ -559,13 +561,20 @@ calendar
 */
 
 
-const flightData = await searchFlights({
 
-from: origin,
+const flightData =
 
-to: destination,
+await searchFlights({
 
-date: departure_date,
+
+from:origin,
+
+
+to:destination,
+
+
+date:departure_date,
+
 
 returnDate:
 
@@ -579,76 +588,26 @@ return_date
 
 null
 
-});
-
-
-
-
-
-const flights = extractFlights(flightData);
-
-
-
-
-
-let returnFlights = [];
-
-
-
-// Extract return leg from roundtrip Google Flights response
-
-if(tripType==="roundtrip"){
-
-
-returnFlights = flights.map(flight=>{
-
-
-if(
-flight.flights &&
-flight.flights.length > 1
-){
-
-
-return {
-
-
-...flight,
-
-
-flights:[
-
-flight.flights[flight.flights.length - 1]
-
-]
-
-
-};
-
-
-}
-
-
-return flight;
-
 
 });
 
 
-}
 
 
 
+const flights =
 
-console.log(
-"Departure Flights:",
-flights.length
+extractFlights(
+flightData
 );
 
 
 
+
+
 console.log(
-"Return Flights:",
-returnFlights.length
+"Round Trip Flights:",
+flights.length
 );
 
 
@@ -659,15 +618,52 @@ returnFlights.length
 return res.status(200).json({
 
 
+
 departure:
 
 flights,
 
 
+
 return:
 
-returnFlights
+flights
 
 
 
 });
+
+
+
+
+
+
+}
+catch(error){
+
+
+
+console.error(
+"🔥 SERVER ERROR:",
+error
+);
+
+
+
+return res.status(500).json({
+
+
+error:"Server crashed",
+
+
+message:error.message
+
+
+});
+
+
+
+}
+
+
+}
