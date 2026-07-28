@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+export default async function handler(req,res){
 
 
 res.setHeader(
@@ -20,7 +20,7 @@ res.setHeader(
 
 
 
-if(req.method === "OPTIONS"){
+if(req.method==="OPTIONS"){
 
 return res.status(200).end();
 
@@ -28,7 +28,7 @@ return res.status(200).end();
 
 
 
-if(req.method !== "POST"){
+if(req.method!=="POST"){
 
 return res.status(405).json({
 
@@ -43,7 +43,7 @@ error:"POST only"
 try{
 
 
-const body = req.body || {};
+const body=req.body || {};
 
 
 
@@ -51,68 +51,6 @@ console.log(
 "🔥 Incoming request:",
 body
 );
-
-
-
-
-function normalizeTrip(type){
-
-if(!type)
-return "oneway";
-
-
-return String(type)
-.toLowerCase()
-.includes("round")
-?
-"roundtrip"
-:
-"oneway";
-
-}
-
-
-
-
-function normalizeInt(value,fallback=1){
-
-const n =
-parseInt(
-String(value)
-.replace(/\D/g,"")
-);
-
-
-return isNaN(n) || n<=0
-?
-fallback
-:
-n;
-
-}
-
-
-
-
-
-function addDays(date,days){
-
-const d =
-new Date(date);
-
-
-d.setDate(
-d.getDate()+days
-);
-
-
-return d
-.toISOString()
-.split("T")[0];
-
-}
-
-
 
 
 
@@ -132,7 +70,6 @@ String(body.destination || "")
 
 
 
-
 const departure_date =
 body.departure_date;
 
@@ -143,19 +80,8 @@ body.return_date;
 
 
 
-
-const tripType =
-normalizeTrip(body.type);
-
-
-
-
 const adults =
-normalizeInt(
-body.adults,
-1
-);
-
+parseInt(body.adults || 1);
 
 
 
@@ -166,7 +92,6 @@ if(
 !departure_date
 ){
 
-
 return res.status(400).json({
 
 error:"Missing required fields",
@@ -175,29 +100,19 @@ received:body
 
 });
 
-
 }
 
 
 
-
-
 /*
- GOOGLE FLIGHTS SEARCH
+========================
+SERPAPI GOOGLE FLIGHTS
+========================
 */
 
 
-async function searchFlights({
+async function searchFlights(){
 
-from,
-
-to,
-
-date,
-
-returnDate
-
-}){
 
 
 const params =
@@ -214,34 +129,31 @@ params.set(
 
 params.set(
 "departure_id",
-from
+origin
 );
 
 
 
 params.set(
 "arrival_id",
-to
+destination
 );
 
 
 
 params.set(
 "outbound_date",
-date
+departure_date
 );
 
 
 
-
-// ROUND TRIP
-
-if(returnDate){
+if(return_date){
 
 
 params.set(
 "return_date",
-returnDate
+return_date
 );
 
 
@@ -252,10 +164,6 @@ params.set(
 
 
 }
-
-
-// ONE WAY
-
 else{
 
 
@@ -292,6 +200,13 @@ params.set(
 
 
 params.set(
+"adults",
+adults
+);
+
+
+
+params.set(
 "deep_search",
 "true"
 );
@@ -313,13 +228,6 @@ params.set(
 
 
 params.set(
-"adults",
-adults
-);
-
-
-
-params.set(
 "api_key",
 process.env.SERPAPI_KEY
 );
@@ -334,18 +242,14 @@ const url =
 
 
 
-
-
 console.log(
 "Searching:",
-from,
+origin,
 "→",
-to,
-date,
-returnDate || ""
+destination,
+departure_date,
+return_date
 );
-
-
 
 
 
@@ -354,255 +258,178 @@ await fetch(url);
 
 
 
-
 if(!response.ok){
 
 throw new Error(
-"SerpAPI error " +
-response.status
+"SerpAPI error "+response.status
 );
 
 }
-
 
 
 
 return await response.json();
 
 
-
 }
-
-
-
-
-
-
-function extractFlights(data){
-
-
-return [
-
-...(data.best_flights || []),
-
-...(data.other_flights || []),
-
-...(data.flights || [])
-
-];
-
-
-}
-
-
 
 
 
 
 
 /*
- FLEXIBLE DATE SEARCH
+========================
+FORMAT FLIGHTS
+========================
 */
 
 
-if(body.flexible_dates === true){
+function formatFlight(flight){
 
 
 
-const dates=[];
+const segments =
+
+(flight.flights || []).map(segment=>({
 
 
-
-for(
-let i=0;
-i<(body.days || 7);
-i++
-){
+airline:
+segment.airline || "",
 
 
-dates.push(
-
-addDays(
-departure_date,
-i
-)
-
-);
+flight_number:
+segment.flight_number || "",
 
 
-}
+aircraft:
+segment.airplane || "",
 
 
+from:
+segment.departure_airport?.id || "",
 
 
-const searches =
-
-await Promise.all(
-
-dates.map(date=>
+to:
+segment.arrival_airport?.id || "",
 
 
-searchFlights({
-
-from:origin,
-
-to:destination,
-
-date,
-
-returnDate:
-tripType==="roundtrip"
-?
-return_date
-:
-null
+departure:
+segment.departure_airport?.time || "",
 
 
-})
+arrival:
+segment.arrival_airport?.time || "",
 
 
-)
+duration:
+segment.duration || 0
 
 
-);
+}));
 
 
-
-
-
-
-const calendar =
-
-searches.map(
-(result,index)=>{
-
-
-const flights =
-extractFlights(result);
-
-
-
-flights.sort(
-
-(a,b)=>
-
-Number(a.price || 0)
-
--
-
-Number(b.price || 0)
-
-);
 
 
 
 return {
 
 
-date:
+id:
+flight.departure_token || "",
 
-dates[index],
+
+
+airline:
+
+flight.flights?.[0]?.airline ||
+
+"Airline",
+
+
+
+logo:
+
+flight.airline_logo ||
+
+"",
+
 
 
 price:
 
-flights[0]?.price || null,
+flight.price || 0,
 
 
-flights
+
+type:
+
+flight.type || "Round trip",
+
+
+
+duration:
+
+flight.total_duration || 0,
+
+
+
+stops:
+
+segments.length > 1
+
+?
+
+`${segments.length-1} Stop`
+
+:
+
+"Nonstop",
+
+
+
+segments
 
 };
 
 
-
-}
-
-);
-
-
-
-
-
-
-return res.status(200).json({
-
-
-departure:
-
-extractFlights(searches[0]),
-
-
-return:
-
-extractFlights(searches[0]),
-
-
-calendar
-
-
-
-});
-
-
-
 }
 
 
-
-
-
-
-
-
-/*
- NORMAL SEARCH
-*/
 
 
 
 const flightData =
-
-await searchFlights({
-
-
-from:origin,
+await searchFlights();
 
 
-to:destination,
 
 
-date:departure_date,
-
-
-returnDate:
-
-tripType==="roundtrip"
-
-?
-
-return_date
-
-:
-
-null
-
-
-});
 console.log(
-"BEST FLIGHT:",
-JSON.stringify(flightData.best_flights?.[0], null, 2)
+"SERPAPI KEYS:",
+Object.keys(flightData)
 );
 
-console.log(
-JSON.stringify(
-flightData.other_flights?.[0].flights,
-null,
-2
-));
+
+
+
+
+const rawFlights = [
+
+
+...(flightData.best_flights || []),
+
+
+...(flightData.other_flights || [])
+
+
+];
+
+
+
 
 console.log(
-"RESPONSE KEYS:",
-Object.keys(flightData)
+"TOTAL RAW FLIGHTS:",
+rawFlights.length
 );
 
 
@@ -610,23 +437,19 @@ Object.keys(flightData)
 
 const flights =
 
-extractFlights(
-flightData
+rawFlights.map(
+formatFlight
 );
 
 
 
 
 
-console.log(
-"Round Trip Flights:",
-flights.length
-);
-
-
-
-
-
+/*
+RETURN SAME DATA
+BECAUSE GOOGLE FLIGHTS
+ROUNDTRIP PRICE IS TOTAL
+*/
 
 return res.status(200).json({
 
@@ -640,7 +463,13 @@ flights,
 
 return:
 
-flights
+flights,
+
+
+
+calendar:
+
+[]
 
 
 
@@ -648,12 +477,8 @@ flights
 
 
 
-
-
-
 }
 catch(error){
-
 
 
 console.error(
@@ -665,15 +490,11 @@ error
 
 return res.status(500).json({
 
-
 error:"Server crashed",
-
 
 message:error.message
 
-
 });
-
 
 
 }
