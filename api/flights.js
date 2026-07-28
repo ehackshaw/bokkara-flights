@@ -49,6 +49,7 @@ Number(body.adults || 1);
 
 
 
+
 async function serpSearch(params){
 
 
@@ -149,6 +150,7 @@ return json;
 
 
 
+
 function normalizeLeg(flight, price, leg){
 
 
@@ -174,7 +176,9 @@ id:
 Date.now()+Math.random(),
 
 
+
 price:price,
+
 
 
 airline:
@@ -221,6 +225,7 @@ duration:
 flight.total_duration || 0,
 
 
+
 flights:segments,
 
 
@@ -231,7 +236,6 @@ leg:leg
 
 
 }
-
 
 
 
@@ -281,10 +285,9 @@ error:"Missing flight fields"
 
 
 
-
 /*
 ====================================
-ROUND TRIP SEARCH
+GOOGLE FLIGHTS ROUND TRIP SEARCH
 ====================================
 */
 
@@ -344,7 +347,6 @@ params.set(
 
 
 
-
 const searchData =
 await serpSearch(params);
 
@@ -353,7 +355,7 @@ await serpSearch(params);
 
 
 console.log(
-"RAW ROUND TRIP RESPONSE",
+"RAW ROUND TRIP RESPONSE:",
 JSON.stringify(searchData,null,2)
 );
 
@@ -368,6 +370,8 @@ const itineraries = [
 ...(searchData.other_flights || [])
 
 ];
+
+
 
 
 
@@ -388,60 +392,85 @@ flight.price || 0;
 
 
 
-
-let outboundSegments =
-flight.flights ||
-flight.outbound_flights ||
-[];
+const segments =
+flight.flights || [];
 
 
 
+if(!segments.length){
 
-let returnSegments =
-flight.return_flights ||
-flight.inbound_flights ||
-[];
+return;
+
+}
+
+
+
+
+let outbound = [];
+
+let inbound = [];
+
+let returnStarted = false;
+
+
+
+
+
+segments.forEach(segment=>{
+
+
+if(
+segment.departure_airport?.id === destination
+){
+
+returnStarted = true;
+
+}
+
+
+
+if(returnStarted){
+
+inbound.push(segment);
+
+}else{
+
+outbound.push(segment);
+
+}
+
+
+
+});
 
 
 
 
 
 /*
-====================================
-HANDLE COMBINED FLIGHT ARRAYS
-====================================
+Fallback if SerpAPI separates legs
 */
 
 
 if(
-!returnSegments.length &&
-outboundSegments.length
+flight.return_flights &&
+flight.return_flights.length
 ){
 
-
-let splitPoint =
-outboundSegments.findIndex(
-(segment)=>
-segment.departure_airport?.id === destination
-);
-
-
-
-if(splitPoint > -1){
-
-
-returnSegments =
-outboundSegments.slice(splitPoint);
-
-
-
-outboundSegments =
-outboundSegments.slice(0,splitPoint);
-
-
+inbound =
+flight.return_flights;
 
 }
 
+
+
+if(
+flight.inbound_flights &&
+flight.inbound_flights.length
+){
+
+inbound =
+flight.inbound_flights;
 
 }
 
@@ -450,14 +479,7 @@ outboundSegments.slice(0,splitPoint);
 
 
 
-/*
-====================================
-CREATE DEPARTURE CARD
-====================================
-*/
-
-
-if(outboundSegments.length){
+if(outbound.length){
 
 
 departureFlights.push(
@@ -465,7 +487,7 @@ departureFlights.push(
 normalizeLeg(
 
 {
-flights:outboundSegments,
+flights:outbound,
 total_duration:flight.total_duration
 
 },
@@ -485,15 +507,7 @@ totalPrice,
 
 
 
-
-/*
-====================================
-CREATE RETURN CARD
-====================================
-*/
-
-
-if(returnSegments.length){
+if(inbound.length){
 
 
 returnFlights.push(
@@ -501,7 +515,7 @@ returnFlights.push(
 normalizeLeg(
 
 {
-flights:returnSegments,
+flights:inbound,
 total_duration:flight.total_duration
 
 },
@@ -527,6 +541,7 @@ totalPrice,
 
 
 
+
 console.log(
 "DEPARTURES:",
 departureFlights.length
@@ -543,6 +558,7 @@ returnFlights.length
 
 
 
+
 return res.status(200).json({
 
 departure:departureFlights,
@@ -550,8 +566,6 @@ departure:departureFlights,
 return:returnFlights
 
 });
-
-
 
 
 
