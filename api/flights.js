@@ -53,10 +53,161 @@ Number(body.adults || 1);
 
 
 
-if(!origin || !destination || !departure_date){
 
-return res.status(400).json({
-error:"Missing fields"
+
+async function serpSearch(params){
+
+
+params.set(
+"engine",
+"google_flights"
+);
+
+
+params.set(
+"currency",
+"USD"
+);
+
+
+params.set(
+"hl",
+"en"
+);
+
+
+params.set(
+"gl",
+"us"
+);
+
+
+params.set(
+"adults",
+adults
+);
+
+
+params.set(
+"api_key",
+process.env.SERPAPI_KEY
+);
+
+
+
+const url=
+"https://serpapi.com/search.json?"
++
+params.toString();
+
+
+
+const response=
+await fetch(url);
+
+
+
+if(!response.ok){
+
+throw new Error(
+"SerpAPI "+response.status
+);
+
+}
+
+
+
+return await response.json();
+
+}
+
+
+
+
+
+function normalizeFlights(data){
+
+
+const raw=[
+
+...(data.best_flights || []),
+
+...(data.other_flights || [])
+
+];
+
+
+
+return raw.map(flight=>{
+
+
+const segment=
+flight.flights?.[0] || {};
+
+
+
+return {
+
+
+price:
+flight.price || 0,
+
+
+departure_token:
+flight.departure_token || "",
+
+
+
+airline:
+segment.airline || "Airline",
+
+
+airline_logo:
+flight.airline_logo || "",
+
+
+
+departure_airport:{
+
+
+id:
+segment.departure_airport?.id || "",
+
+
+time:
+segment.departure_airport?.time || ""
+
+},
+
+
+
+arrival_airport:{
+
+
+id:
+segment.arrival_airport?.id || "",
+
+
+time:
+segment.arrival_airport?.time || ""
+
+},
+
+
+
+flights:
+flight.flights || [],
+
+
+segments:
+flight.flights || []
+
+
+
+};
+
+
+
 });
 
 }
@@ -65,20 +216,57 @@ error:"Missing fields"
 
 
 
+
+
 /*
- GOOGLE FLIGHTS SEARCH
+ RETURN SEARCH WHEN TOKEN PROVIDED
 */
 
-async function searchFlights(){
+
+if(body.departure_token){
 
 
-const params=new URLSearchParams();
+const params=
+new URLSearchParams();
 
 
 params.set(
-"engine",
-"google_flights"
+"departure_token",
+body.departure_token
 );
+
+
+
+const returnData =
+await serpSearch(params);
+
+
+
+return res.status(200).json({
+
+return:
+normalizeFlights(returnData)
+
+});
+
+
+}
+
+
+
+
+
+
+
+
+/*
+ NORMAL OUTBOUND SEARCH
+*/
+
+
+const params=
+new URLSearchParams();
+
 
 
 params.set(
@@ -114,7 +302,6 @@ params.set(
 );
 
 }
-
 else{
 
 params.set(
@@ -126,406 +313,38 @@ params.set(
 
 
 
-params.set(
-"currency",
-"USD"
-);
 
-
-params.set(
-"hl",
-"en"
-);
-
-
-params.set(
-"gl",
-"us"
-);
-
-
-params.set(
-"adults",
-adults
-);
-
-
-params.set(
-"deep_search",
-"true"
-);
-
-
-params.set(
-"api_key",
-process.env.SERPAPI_KEY
-);
-
-
-
-const url =
-"https://serpapi.com/search.json?"
-+
-params.toString();
+const data =
+await serpSearch(params);
 
 
 
 console.log(
-"Searching:",
-origin,
-"→",
-destination
+"SERP KEYS:",
+Object.keys(data)
 );
 
 
 
-const response =
-await fetch(url);
-
-
-
-if(!response.ok){
-
-throw new Error(
-"SerpAPI "+response.status
-);
-
-}
-
-
-
-return await response.json();
-
-
-}
-
-
-
-
-
-
-/*
- RETURN SEARCH USING TOKEN
-*/
-
-async function searchReturnFlights(token){
-
-
-const params=new URLSearchParams();
-
-
-params.set(
-"engine",
-"google_flights"
-);
-
-
-params.set(
-"departure_token",
-token
-);
-
-
-params.set(
-"currency",
-"USD"
-);
-
-
-params.set(
-"hl",
-"en"
-);
-
-
-params.set(
-"gl",
-"us"
-);
-
-
-params.set(
-"adults",
-adults
-);
-
-
-params.set(
-"api_key",
-process.env.SERPAPI_KEY
-);
-
-
-
-const url =
-"https://serpapi.com/search.json?"
-+
-params.toString();
+const flights =
+normalizeFlights(data);
 
 
 
 console.log(
-"Searching return token"
+"FLIGHTS FOUND:",
+flights.length
 );
-
-
-
-const response =
-await fetch(url);
-
-
-
-if(!response.ok){
-
-throw new Error(
-"Return SerpAPI "+response.status
-);
-
-}
-
-
-
-return await response.json();
-
-
-}
-
-
-
-
-
-
-
-function normalizeFlights(data){
-
-
-const raw=[
-
-...(data.best_flights || []),
-
-...(data.other_flights || [])
-
-];
-
-
-
-return raw.map(flight=>{
-
-
-const firstSegment =
-flight.flights?.[0] || {};
-
-
-
-return{
-
-
-departure_token:
-flight.departure_token || "",
-
-
-
-price:
-flight.price || 0,
-
-
-
-airline:
-firstSegment.airline ||
-flight.airline ||
-"Airline",
-
-
-
-airline_logo:
-flight.airline_logo ||
-"",
-
-
-
-total_duration:
-flight.total_duration ||
-0,
-
-
-
-flights:
-flight.flights || [],
-
-
-
-departure_airport:{
-
-
-id:
-firstSegment.departure_airport?.id ||
-origin,
-
-
-time:
-firstSegment.departure_airport?.time ||
-""
-
-
-},
-
-
-
-arrival_airport:{
-
-
-id:
-firstSegment.arrival_airport?.id ||
-destination,
-
-
-time:
-firstSegment.arrival_airport?.time ||
-""
-
-
-},
-
-
-
-segments:
-flight.flights || []
-
-
-
-};
-
-
-});
-
-
-}
-
-
-
-
-
-
-/*
- GET DEPARTURES
-*/
-
-
-const flightData =
-await searchFlights();
-
-
-
-console.log(
-"OUTBOUND KEYS:",
-Object.keys(flightData)
-);
-
-
-
-let departureFlights =
-normalizeFlights(flightData);
-
-
-
-
-console.log(
-"OUTBOUND COUNT:",
-departureFlights.length
-);
-
-
-
-
-
-
-
-/*
- GET RETURNS
-*/
-
-
-let returnFlights=[];
-
-
-
-if(
-return_date &&
-departureFlights.length &&
-departureFlights[0].departure_token
-){
-
-
-const returnData =
-await searchReturnFlights(
-departureFlights[0].departure_token
-);
-
-
-
-console.log(
-"RETURN KEYS:",
-Object.keys(returnData)
-);
-
-
-
-returnFlights =
-normalizeFlights(returnData);
-
-
-
-}
-
-
-
-
-
-
-/*
- KEEP ROUNDTRIP TOTAL PRICE
-*/
-
-
-if(returnFlights.length){
-
-
-returnFlights =
-returnFlights.map(flight=>{
-
-
-return{
-
-...flight,
-
-
-price:
-departureFlights[0].price || flight.price
-
-
-};
-
-
-});
-
-
-}
-
-
-
 
 
 
 return res.status(200).json({
 
 
-departure:
-departureFlights,
+departure:flights,
 
 
-return:
-returnFlights
-
+return:[]
 
 
 });
@@ -539,10 +358,9 @@ catch(error){
 
 
 console.error(
-"🔥 SERVER ERROR:",
+"🔥 ERROR:",
 error
 );
-
 
 
 return res.status(500).json({
