@@ -139,7 +139,6 @@ throw new Error(
 }
 
 
-
 return json;
 
 
@@ -148,32 +147,15 @@ return json;
 
 
 
-
-function normalizeFlights(data){
-
-
-
-const results = [
-
-...(data.best_flights || []),
-
-...(data.other_flights || [])
-
-];
-
-
-
-return results.map((flight,index)=>{
+function normalizeLeg(flight, price, leg){
 
 
 const segments =
 flight.flights || [];
 
 
-
 const first =
 segments[0] || {};
-
 
 
 const last =
@@ -184,27 +166,19 @@ segments[segments.length - 1] || {};
 return {
 
 
-id:index,
+id:Date.now()+Math.random(),
 
 
-
-price:
-flight.price || 0,
-
+price:price,
 
 
 airline:
-
 first.airline ||
-
 "Airline",
 
 
-
 airline_logo:
-
 first.airline_logo ||
-
 "",
 
 
@@ -213,12 +187,10 @@ departure_airport:{
 
 
 id:
-
 first.departure_airport?.id || "",
 
 
 time:
-
 first.departure_airport?.time || ""
 
 },
@@ -229,12 +201,10 @@ arrival_airport:{
 
 
 id:
-
 last.arrival_airport?.id || "",
 
 
 time:
-
 last.arrival_airport?.time || ""
 
 },
@@ -242,24 +212,18 @@ last.arrival_airport?.time || ""
 
 
 duration:
-
 flight.total_duration || 0,
 
 
+flights:segments,
 
-flights:
 
-segments
-
+leg:leg
 
 };
 
 
-});
-
-
 }
-
 
 
 
@@ -308,100 +272,179 @@ error:"Missing flight fields"
 
 /*
 ====================================
-DEPARTURE SEARCH
-ORIGIN → DESTINATION
+ROUND TRIP SEARCH
 ====================================
 */
 
 
-const params = new URLSearchParams();
-
-params.set("departure_id", origin);
-
-params.set("arrival_id", destination);
-
-params.set("outbound_date", departure_date);
-
-if (return_date) {
-
-    params.set("return_date", return_date);
-
-    params.set("type", "1"); // Round Trip
-
-} else {
-
-    params.set("type", "2"); // One Way
-
-}
-
-const searchData = await serpSearch(params);
-
-
-
-
-
-/*
-====================================
-RETURN SEARCH
-DESTINATION → ORIGIN
-====================================
-*/
-
-
-let returnFlights = [];
-
-
-
-if(return_date){
-
-
-
-const returnParams =
+const params =
 new URLSearchParams();
 
 
 
-returnParams.set(
+params.set(
 "departure_id",
-destination
-);
-
-
-
-returnParams.set(
-"arrival_id",
 origin
 );
 
 
 
-returnParams.set(
-"outbound_date",
-return_date
+params.set(
+"arrival_id",
+destination
 );
 
 
 
-returnParams.set(
+params.set(
+"outbound_date",
+departure_date
+);
+
+
+
+if(return_date){
+
+params.set(
+"return_date",
+return_date
+);
+
+
+params.set(
+"type",
+"1"
+);
+
+
+}else{
+
+
+params.set(
 "type",
 "2"
 );
 
 
-
-const returnData =
-await serpSearch(returnParams);
+}
 
 
 
-returnFlights =
-normalizeFlights(
-returnData
+
+const searchData =
+await serpSearch(params);
+
+
+
+console.log(
+"RAW ROUND TRIP RESPONSE",
+JSON.stringify(searchData,null,2)
+);
+
+
+
+
+const itineraries = [
+
+...(searchData.best_flights || []),
+
+...(searchData.other_flights || [])
+
+];
+
+
+
+let departureFlights = [];
+
+let returnFlights = [];
+
+
+
+
+itineraries.forEach((flight,index)=>{
+
+
+const totalPrice =
+flight.price || 0;
+
+
+
+const segments =
+flight.flights || [];
+
+
+
+if(!segments.length){
+
+return;
+
+}
+
+
+
+const outbound = {
+
+flights:segments.filter(
+(segment)=>
+segment.departure_airport?.id === origin
+),
+
+
+total_duration:
+flight.total_duration
+
+};
+
+
+
+const inbound = {
+
+flights:segments.filter(
+(segment)=>
+segment.departure_airport?.id === destination
+),
+
+
+total_duration:
+flight.total_duration
+
+};
+
+
+
+if(outbound.flights.length){
+
+
+departureFlights.push(
+normalizeLeg(
+outbound,
+totalPrice,
+"departure"
+)
 );
 
 
 }
 
+
+
+if(inbound.flights.length){
+
+
+returnFlights.push(
+normalizeLeg(
+inbound,
+totalPrice,
+"return"
+)
+);
+
+
+}
+
+
+
+});
 
 
 
@@ -419,18 +462,21 @@ console.log(
 returnFlights.length
 );
 
-console.log(
-JSON.stringify(searchData, null, 2)
-);
 
-return res.status(200).json(searchData);
+
+return res.status(200).json({
+
+departure:departureFlights,
+
+return:returnFlights
+
+});
+
+
 
 
 
 }
-
-
-
 catch(error){
 
 
