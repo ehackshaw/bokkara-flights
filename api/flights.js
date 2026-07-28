@@ -594,9 +594,11 @@ JSON.stringify(flightData.best_flights?.[0], null, 2)
 );
 
 console.log(
-"OTHER FLIGHT:",
-JSON.stringify(flightData.other_flights?.[0], null, 2)
-);
+JSON.stringify(
+flightData.other_flights?.[0].flights,
+null,
+2
+));
 
 console.log(
 "RESPONSE KEYS:",
