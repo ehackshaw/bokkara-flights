@@ -314,50 +314,27 @@ ORIGIN → DESTINATION
 */
 
 
-const departureParams =
-new URLSearchParams();
+const params = new URLSearchParams();
 
+params.set("departure_id", origin);
 
+params.set("arrival_id", destination);
 
-departureParams.set(
-"departure_id",
-origin
-);
+params.set("outbound_date", departure_date);
 
+if (return_date) {
 
+    params.set("return_date", return_date);
 
-departureParams.set(
-"arrival_id",
-destination
-);
+    params.set("type", "1"); // Round Trip
 
+} else {
 
+    params.set("type", "2"); // One Way
 
-departureParams.set(
-"outbound_date",
-departure_date
-);
+}
 
-
-
-departureParams.set(
-"type",
-"2"
-);
-
-
-
-const departureData =
-await serpSearch(departureParams);
-
-
-
-
-const departureFlights =
-normalizeFlights(
-departureData
-);
-
+const searchData = await serpSearch(params);
 
 
 
@@ -442,17 +419,11 @@ console.log(
 returnFlights.length
 );
 
+console.log(
+JSON.stringify(searchData, null, 2)
+);
 
-
-
-
-return res.status(200).json({
-
-departure:departureFlights,
-
-return:returnFlights
-
-});
+return res.status(200).json(searchData);
 
 
 
