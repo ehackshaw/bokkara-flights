@@ -588,7 +588,7 @@ null
 
 
 });
-
+console.log(JSON.stringify(flightData,null,2));
 
 
 
