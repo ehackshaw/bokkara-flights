@@ -17,12 +17,10 @@ error:"POST only"
 }
 
 
-
 try{
 
 
 const body=req.body || {};
-
 
 console.log("🔥 REQUEST:",body);
 
@@ -102,6 +100,13 @@ params.toString();
 
 
 
+console.log(
+"SERP:",
+url
+);
+
+
+
 const response=
 await fetch(url);
 
@@ -118,6 +123,7 @@ throw new Error(
 
 
 return await response.json();
+
 
 }
 
@@ -167,6 +173,11 @@ flight.airline_logo || "",
 
 
 
+total_duration:
+flight.total_duration || 0,
+
+
+
 departure_airport:{
 
 
@@ -203,50 +214,9 @@ segments:
 flight.flights || []
 
 
-
 };
 
 
-
-});
-
-}
-
-
-
-
-
-
-
-/*
- RETURN SEARCH WHEN TOKEN PROVIDED
-*/
-
-
-if(body.departure_token){
-
-
-const params=
-new URLSearchParams();
-
-
-params.set(
-"departure_token",
-body.departure_token
-);
-
-
-
-const returnData =
-await serpSearch(params);
-
-
-
-return res.status(200).json({
-
-return:
-normalizeFlights(returnData)
-
 });
 
 
@@ -257,31 +227,30 @@ normalizeFlights(returnData)
 
 
 
-
-
 /*
- NORMAL OUTBOUND SEARCH
+========================
+SEARCH DEPARTURE
+========================
 */
 
 
-const params=
+const outboundParams=
 new URLSearchParams();
 
 
-
-params.set(
+outboundParams.set(
 "departure_id",
 origin
 );
 
 
-params.set(
+outboundParams.set(
 "arrival_id",
 destination
 );
 
 
-params.set(
+outboundParams.set(
 "outbound_date",
 departure_date
 );
@@ -290,13 +259,13 @@ departure_date
 
 if(return_date){
 
-params.set(
+outboundParams.set(
 "return_date",
 return_date
 );
 
 
-params.set(
+outboundParams.set(
 "type",
 "1"
 );
@@ -304,7 +273,7 @@ params.set(
 }
 else{
 
-params.set(
+outboundParams.set(
 "type",
 "2"
 );
@@ -314,40 +283,123 @@ params.set(
 
 
 
-const data =
-await serpSearch(params);
+const outboundData=
+await serpSearch(outboundParams);
 
 
 
 console.log(
-"SERP KEYS:",
-Object.keys(data)
+"OUTBOUND KEYS:",
+Object.keys(outboundData)
 );
 
 
 
-const flights =
-normalizeFlights(data);
+const departureFlights=
+normalizeFlights(outboundData);
 
 
 
 console.log(
-"FLIGHTS FOUND:",
-flights.length
+"DEPARTURE COUNT:",
+departureFlights.length
 );
+
+
+
+
+
+
+/*
+========================
+SEARCH RETURN USING TOKEN
+========================
+*/
+
+
+let returnFlights=[];
+
+
+
+if(return_date && departureFlights.length){
+
+
+
+const token=
+departureFlights[0].departure_token;
+
+
+
+console.log(
+"USING TOKEN:",
+token
+);
+
+
+
+if(token){
+
+
+const returnParams=
+new URLSearchParams();
+
+
+returnParams.set(
+"departure_token",
+token
+);
+
+
+
+const returnData=
+await serpSearch(returnParams);
+
+
+
+console.log(
+"RETURN KEYS:",
+Object.keys(returnData)
+);
+
+
+
+returnFlights=
+normalizeFlights(returnData);
+
+
+
+}
+
+
+
+}
+
+
+
+
+
+console.log(
+"RETURN COUNT:",
+returnFlights.length
+);
+
+
 
 
 
 return res.status(200).json({
 
 
-departure:flights,
+departure:
+departureFlights,
 
 
-return:[]
+return:
+returnFlights
 
 
 });
+
 
 
 
@@ -361,6 +413,7 @@ console.error(
 "🔥 ERROR:",
 error
 );
+
 
 
 return res.status(500).json({
