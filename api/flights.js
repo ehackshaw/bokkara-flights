@@ -395,21 +395,99 @@ roundTripFlights.length
 
 
 
+const departureFlights = roundTripFlights.map((flight,index)=>{
+
+
+return {
+
+...flight,
+
+direction:"departure",
+
+price:flight.price,
+
+
+};
+
+});
+
+
+
+const returnFlights = roundTripFlights.map((flight,index)=>{
+
+
+const returnSegment =
+flight.flights?.filter(
+(segment)=>{
+
+return (
+segment.departure_airport?.id === destination &&
+segment.arrival_airport?.id === origin
+);
+
+}
+
+);
+
+
+
+return {
+
+
+...flight,
+
+
+id:index,
+
+
+direction:"return",
+
+
+departure_airport:{
+
+id:
+returnSegment[0]?.departure_airport?.id || destination,
+
+
+time:
+returnSegment[0]?.departure_airport?.time || ""
+
+
+},
+
+
+arrival_airport:{
+
+id:
+returnSegment[returnSegment.length-1]?.arrival_airport?.id || origin,
+
+
+time:
+returnSegment[returnSegment.length-1]?.arrival_airport?.time || ""
+
+
+},
+
+
+price:flight.price,
+
+
+flights:returnSegment
+
+
+};
+
+
+});
+
+
+
+
 return res.status(200).json({
 
+departure:departureFlights,
 
-/*
-Same round trip price
-shown on departure and return cards
-*/
-
-departure:
-roundTripFlights,
-
-
-return:
-roundTripFlights
-
+return:returnFlights
 
 });
 
