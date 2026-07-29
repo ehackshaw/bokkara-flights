@@ -252,6 +252,7 @@ flights:
 segments
 
 
+
 };
 
 
@@ -259,6 +260,7 @@ segments
 
 
 }
+
 
 
 
@@ -289,6 +291,8 @@ body.return_date;
 
 
 
+
+
 if(
 !origin ||
 !destination ||
@@ -306,127 +310,200 @@ error:"Missing flight fields"
 
 
 
+
+
 /*
 ====================================
-DEPARTURE SEARCH
-ORIGIN → DESTINATION
+ROUND TRIP GOOGLE FLIGHTS SEARCH
 ====================================
 */
 
 
-const departureParams =
+const flightParams =
 new URLSearchParams();
 
 
 
-departureParams.set(
+flightParams.set(
 "departure_id",
 origin
 );
 
 
 
-departureParams.set(
+flightParams.set(
 "arrival_id",
 destination
 );
 
 
 
-departureParams.set(
+flightParams.set(
 "outbound_date",
 departure_date
 );
 
 
 
-departureParams.set(
+if(return_date){
+
+flightParams.set(
+"return_date",
+return_date
+);
+
+}
+
+
+
+/*
+Google Flights:
+1 = Round trip
+2 = One way
+*/
+
+flightParams.set(
 "type",
-"2"
+return_date ? "1" : "2"
 );
 
 
 
-const departureData =
-await serpSearch(departureParams);
+
+
+const flightData =
+await serpSearch(flightParams);
 
 
 
 
-const departureFlights =
+
+const allFlights =
 normalizeFlights(
-departureData
+flightData
 );
 
+
+
+
+
+let departureFlights = [];
+let returnFlights = [];
+
+
+
+
+
+allFlights.forEach((flight,index)=>{
+
+
+let segments =
+flight.flights || [];
+
+
+
+let outboundSegments =
+segments.filter(segment=>{
+
+return (
+
+segment.departure_airport?.id === origin &&
+
+segment.arrival_airport?.id !== origin
+
+);
+
+});
+
+
+
+let inboundSegments =
+segments.filter(segment=>{
+
+return (
+
+segment.departure_airport?.id === destination
+
+);
+
+});
 
 
 
 
 
 /*
-====================================
-RETURN SEARCH
-DESTINATION → ORIGIN
-====================================
+Create departure card
 */
 
-
-let returnFlights = [];
-
+if(outboundSegments.length){
 
 
-if(return_date){
+departureFlights.push({
+
+...flight,
+
+id:index,
+
+flights:outboundSegments,
 
 
-
-const returnParams =
-new URLSearchParams();
-
+departure_airport:
+outboundSegments[0].departure_airport,
 
 
-returnParams.set(
-"departure_id",
-destination
-);
+arrival_airport:
+outboundSegments[outboundSegments.length-1].arrival_airport
 
-
-
-returnParams.set(
-"arrival_id",
-origin
-);
-
-
-
-returnParams.set(
-"outbound_date",
-return_date
-);
-
-
-
-returnParams.set(
-"type",
-"2"
-);
-
-
-
-const returnData =
-await serpSearch(returnParams);
-
-
-
-returnFlights =
-normalizeFlights(
-returnData
-);
+});
 
 
 }
 
 
 
+
+
+/*
+Create return card
+*/
+
+if(inboundSegments.length){
+
+
+returnFlights.push({
+
+...flight,
+
+id:index,
+
+flights:inboundSegments,
+
+
+departure_airport:
+inboundSegments[0].departure_airport,
+
+
+arrival_airport:
+inboundSegments[inboundSegments.length-1].arrival_airport
+
+});
+
+
+}
+
+
+
+});
+
+
+
+
+
+console.log(
+"ROUND TRIP PRICE SAMPLE:",
+allFlights[0]?.price
+);
 
 
 
@@ -441,6 +518,7 @@ console.log(
 "RETURNS:",
 returnFlights.length
 );
+
 
 
 
