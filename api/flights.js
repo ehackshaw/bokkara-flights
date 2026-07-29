@@ -141,6 +141,7 @@ throw new Error(
 }
 
 
+
 return json;
 
 
@@ -151,10 +152,10 @@ return json;
 
 
 
-function normalizeFlights(data){
 
+function getAllFlights(data){
 
-const results = [
+return [
 
 ...(data.best_flights || []),
 
@@ -162,9 +163,19 @@ const results = [
 
 ];
 
+}
 
 
-return results.map((flight,index)=>{
+
+
+
+
+
+function splitRoundTripFlight(
+flight,
+origin,
+destination
+){
 
 
 const segments =
@@ -172,50 +183,62 @@ flight.flights || [];
 
 
 
-return {
+let outbound = [];
 
-
-id:index,
-
-
-price:
-flight.price || 0,
+let inbound = [];
 
 
 
-airline:
-segments[0]?.airline ||
-"Airline",
+segments.forEach(segment=>{
+
+
+const from =
+segment.departure_airport?.id;
+
+
+const to =
+segment.arrival_airport?.id;
 
 
 
-airline_logo:
-segments[0]?.airline_logo ||
-"",
+// outbound POS -> PTY
+
+if(
+from === origin
+){
+
+outbound.push(segment);
+
+}
 
 
+// return PTY -> POS
 
-duration:
-flight.total_duration || 0,
+else if(
+from === destination
+){
 
+inbound.push(segment);
 
-
-departure_token:
-flight.departure_token || "",
-
-
-
-flights:
-segments
-
-
-};
+}
 
 
 });
 
 
+
+return {
+
+outbound,
+
+inbound
+
+};
+
+
 }
+
+
 
 
 
@@ -268,34 +291,34 @@ error:"Missing flight fields"
 
 
 
+
 /*
 ====================================
-FIRST GOOGLE FLIGHTS SEARCH
-OUTBOUND
+GOOGLE FLIGHTS ROUND TRIP SEARCH
 ====================================
 */
 
 
-const outboundParams =
+const params =
 new URLSearchParams();
 
 
 
-outboundParams.set(
+params.set(
 "departure_id",
 origin
 );
 
 
 
-outboundParams.set(
+params.set(
 "arrival_id",
 destination
 );
 
 
 
-outboundParams.set(
+params.set(
 "outbound_date",
 departure_date
 );
@@ -304,7 +327,7 @@ departure_date
 
 if(return_date){
 
-outboundParams.set(
+params.set(
 "return_date",
 return_date
 );
@@ -313,7 +336,7 @@ return_date
 
 
 
-outboundParams.set(
+params.set(
 "type",
 return_date ? "1" : "2"
 );
@@ -323,25 +346,38 @@ return_date ? "1" : "2"
 
 
 
-const outboundData =
-await serpSearch(outboundParams);
+const data =
+await serpSearch(params);
 
 
 
 
 console.log(
-"🔥 OUTBOUND RESPONSE:",
-Object.keys(outboundData)
+"🔥 BEST FLIGHT SAMPLE:",
+data.best_flights?.[0]
+);
+
+
+
+console.log(
+"🔥 OTHER FLIGHT SAMPLE:",
+data.other_flights?.[0]
 );
 
 
 
 
+const rawFlights =
+getAllFlights(data);
 
-const outboundFlights =
-normalizeFlights(
-outboundData
+
+
+
+console.log(
+"🔥 TOTAL RAW SERP FLIGHTS:",
+rawFlights.length
 );
+
 
 
 
@@ -356,124 +392,117 @@ let returnFlights = [];
 
 
 
+rawFlights.forEach(
+(flight,index)=>{
+
+
+
+const split =
+splitRoundTripFlight(
+flight,
+origin,
+destination
+);
+
+
+
 
 
 /*
-====================================
-GET RETURN USING DEPARTURE TOKEN
-====================================
+=========================
+DEPARTURE CARD
+=========================
 */
 
 
-for(
-let i=0;
-i<outboundFlights.length;
-i++
-){
-
-
-const flight =
-outboundFlights[i];
-
-
+if(split.outbound.length){
 
 
 departureFlights.push({
 
-...flight,
 
-flights:
-flight.flights,
+id:index,
 
 
 price:
-flight.price
+flight.price || 0,
+
+
+airline:
+split.outbound[0]?.airline ||
+"Airline",
+
+
+
+airline_logo:
+split.outbound[0]?.airline_logo ||
+"",
+
+
+
+duration:
+flight.total_duration || 0,
+
+
+
+flights:
+split.outbound
+
 
 
 });
 
 
 
-
-
-
-if(
-return_date &&
-flight.departure_token
-){
-
-
-
-const returnParams =
-new URLSearchParams();
-
-
-
-returnParams.set(
-"departure_token",
-flight.departure_token
-);
-
-
-
-const returnData =
-await serpSearch(returnParams);
-
-
-
-
-console.log(
-"🔥 RETURN TOKEN RESPONSE:",
-Object.keys(returnData)
-);
-
-
-
-
-const returnResults =
-normalizeFlights(returnData);
+}
 
 
 
 
 
-returnResults.forEach((ret)=>{
 
+
+/*
+=========================
+RETURN CARD
+SAME ROUND TRIP PRICE
+=========================
+*/
+
+
+if(split.inbound.length){
 
 
 returnFlights.push({
 
 
-id:i,
+id:index,
 
 
 price:
-flight.price,
+flight.price || 0,
+
 
 
 airline:
-ret.airline ||
-flight.airline,
+split.inbound[0]?.airline ||
+"Airline",
 
 
 
 airline_logo:
-ret.airline_logo ||
-flight.airline_logo,
+split.inbound[0]?.airline_logo ||
+"",
 
 
 
 duration:
-ret.duration,
+flight.total_duration || 0,
 
 
 
 flights:
-ret.flights
-
-
-
-});
+split.inbound
 
 
 
@@ -485,8 +514,7 @@ ret.flights
 
 
 
-}
-
+});
 
 
 
@@ -525,7 +553,6 @@ returnFlights[0]?.price
 
 
 
-
 return res.status(200).json({
 
 departure:
@@ -535,10 +562,7 @@ departureFlights,
 return:
 returnFlights
 
-
 });
-
-
 
 
 }
@@ -546,7 +570,6 @@ returnFlights
 
 
 catch(error){
-
 
 
 console.error(
