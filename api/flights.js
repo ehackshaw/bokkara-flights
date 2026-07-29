@@ -96,7 +96,6 @@ process.env.SERPAPI_KEY
 
 
 
-
 const url =
 "https://serpapi.com/search.json?"
 +
@@ -111,7 +110,6 @@ process.env.SERPAPI_KEY,
 "HIDDEN"
 )
 );
-
 
 
 
@@ -146,11 +144,11 @@ throw new Error(
 }
 
 
-
 return json;
 
 
 }
+
 
 
 
@@ -207,11 +205,6 @@ flight.total_duration || 0,
 
 
 
-departure_token:
-flight.departure_token || "",
-
-
-
 flights:
 segments
 
@@ -224,6 +217,7 @@ segments
 
 
 }
+
 
 
 
@@ -279,34 +273,34 @@ error:"Missing flight fields"
 
 
 
-
 /*
 ====================================
-ROUND TRIP SEARCH
+DEPARTURE SEARCH
+ORIGIN → DESTINATION
 ====================================
 */
 
 
-const params =
+const departureParams =
 new URLSearchParams();
 
 
 
-params.set(
+departureParams.set(
 "departure_id",
 origin
 );
 
 
 
-params.set(
+departureParams.set(
 "arrival_id",
 destination
 );
 
 
 
-params.set(
+departureParams.set(
 "outbound_date",
 departure_date
 );
@@ -315,7 +309,7 @@ departure_date
 
 if(return_date){
 
-params.set(
+departureParams.set(
 "return_date",
 return_date
 );
@@ -324,7 +318,7 @@ return_date
 
 
 
-params.set(
+departureParams.set(
 "type",
 return_date ? "1" : "2"
 );
@@ -334,34 +328,33 @@ return_date ? "1" : "2"
 
 
 
-const outboundData =
-await serpSearch(params);
-
-
-
-
-
-console.log(
-"🔥 OUTBOUND RESPONSE:",
-Object.keys(outboundData)
+const departureData =
+await serpSearch(
+departureParams
 );
 
 
 
 
+console.log(
+"🔥 DEPARTURE KEYS:",
+Object.keys(departureData)
+);
 
-const outboundFlights =
+
+
+
+const departureRaw =
 normalizeFlights(
-outboundData
+departureData
 );
-
 
 
 
 
 console.log(
-"🔥 TOTAL OUTBOUND FLIGHTS:",
-outboundFlights.length
+"🔥 DEPARTURE COUNT:",
+departureRaw.length
 );
 
 
@@ -369,40 +362,14 @@ outboundFlights.length
 
 
 
-let departureFlights = [];
-
-let returnFlights = [];
-
+const departureFlights =
+departureRaw.map((flight,index)=>{
 
 
+return {
 
 
-
-
-for(
-let i=0;
-i<outboundFlights.length;
-i++
-){
-
-
-const flight =
-outboundFlights[i];
-
-
-
-
-/*
-====================================
-CREATE DEPARTURE CARD
-====================================
-*/
-
-
-departureFlights.push({
-
-
-id:i,
+id:index,
 
 
 price:
@@ -421,13 +388,11 @@ duration:
 flight.duration,
 
 
-departure_token:
-flight.departure_token,
-
-
 flights:
 flight.flights
 
+
+};
 
 
 });
@@ -439,20 +404,23 @@ flight.flights
 
 
 
+
+let returnFlights=[];
+
+
+
+
+
+
 /*
 ====================================
-GET RETURN USING TOKEN
+RETURN SEARCH
+DESTINATION → ORIGIN
 ====================================
 */
 
 
-if(
-return_date &&
-flight.departure_token
-){
-
-
-try{
+if(return_date){
 
 
 const returnParams =
@@ -461,48 +429,47 @@ new URLSearchParams();
 
 
 returnParams.set(
-"departure_token",
-flight.departure_token
-);
-
-
-
-/*
-SerpAPI requires these
-*/
-
-returnParams.set(
 "departure_id",
-origin
-);
-
-
-
-returnParams.set(
-"arrival_id",
 destination
 );
 
 
 
 returnParams.set(
+"arrival_id",
+origin
+);
+
+
+
+returnParams.set(
+"outbound_date",
+return_date
+);
+
+
+
+returnParams.set(
 "type",
-"1"
+"2"
 );
 
 
 
 
 
+
 const returnData =
-await serpSearch(returnParams);
+await serpSearch(
+returnParams
+);
 
 
 
 
 
 console.log(
-"🔥 RETURN TOKEN RESPONSE:",
+"🔥 RETURN KEYS:",
 Object.keys(returnData)
 );
 
@@ -510,51 +477,81 @@ Object.keys(returnData)
 
 
 
-const returnResults =
-normalizeFlights(returnData);
+const returnRaw =
+normalizeFlights(
+returnData
+);
 
 
 
 
 
-returnResults.forEach((ret)=>{
+console.log(
+"🔥 RETURN COUNT:",
+returnRaw.length
+);
 
 
-returnFlights.push({
 
 
-id:i,
+
+
+returnFlights =
+returnRaw.map((flight,index)=>{
+
 
 
 /*
-IMPORTANT:
-Google Flights round trip price
+Find matching airline round-trip price
+*/
+
+const match =
+departureRaw.find(
+(dep)=>
+dep.airline === flight.airline
+);
+
+
+
+return {
+
+
+id:index,
+
+
+
+/*
+Google Flights behavior:
+Return cards display total round trip price
 */
 
 price:
+match?.price ||
+departureRaw[0]?.price ||
 flight.price,
 
 
 
 airline:
-ret.airline ||
 flight.airline,
 
 
 
 airline_logo:
-ret.airline_logo ||
 flight.airline_logo,
 
 
 
 duration:
-ret.duration,
+flight.duration,
 
 
 
 flights:
-ret.flights
+flight.flights
+
+
+};
 
 
 
@@ -562,29 +559,9 @@ ret.flights
 
 
 
-});
-
-
-
-}
-catch(returnError){
-
-
-console.log(
-"⚠️ RETURN TOKEN FAILED:",
-returnError.message
-);
-
-
 }
 
 
-
-}
-
-
-
-}
 
 
 
@@ -620,8 +597,6 @@ returnFlights[0]?.price
 }
 
 );
-
-
 
 
 
