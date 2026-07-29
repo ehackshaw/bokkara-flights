@@ -89,6 +89,23 @@ params.set(
 );
 
 
+/*
+GET MORE GOOGLE FLIGHTS RESULTS
+*/
+
+params.set(
+"show_hidden",
+"true"
+);
+
+
+params.set(
+"sort_by",
+"2"
+);
+
+
+
 params.set(
 "api_key",
 process.env.SERPAPI_KEY
@@ -110,6 +127,7 @@ process.env.SERPAPI_KEY,
 "HIDDEN"
 )
 );
+
 
 
 
@@ -144,10 +162,12 @@ throw new Error(
 }
 
 
+
 return json;
 
 
 }
+
 
 
 
@@ -166,6 +186,13 @@ const results = [
 ...(data.other_flights || [])
 
 ];
+
+
+
+console.log(
+"🔥 TOTAL RAW SERP FLIGHTS:",
+results.length
+);
 
 
 
@@ -189,23 +216,29 @@ flight.price || 0,
 
 
 airline:
+
 segments[0]?.airline ||
+
 "Airline",
 
 
 
 airline_logo:
+
 segments[0]?.airline_logo ||
+
 "",
 
 
 
 duration:
+
 flight.total_duration || 0,
 
 
 
 flights:
+
 segments
 
 
@@ -253,6 +286,7 @@ body.return_date;
 
 
 
+
 if(
 !origin ||
 !destination ||
@@ -266,6 +300,8 @@ error:"Missing flight fields"
 });
 
 }
+
+
 
 
 
@@ -328,10 +364,13 @@ return_date ? "1" : "2"
 
 
 
+
 const departureData =
 await serpSearch(
 departureParams
 );
+
+
 
 
 
@@ -344,18 +383,13 @@ Object.keys(departureData)
 
 
 
+
+
 const departureRaw =
 normalizeFlights(
 departureData
 );
 
-
-
-
-console.log(
-"🔥 DEPARTURE COUNT:",
-departureRaw.length
-);
 
 
 
@@ -376,16 +410,20 @@ price:
 flight.price,
 
 
+
 airline:
 flight.airline,
+
 
 
 airline_logo:
 flight.airline_logo,
 
 
+
 duration:
 flight.duration,
+
 
 
 flights:
@@ -393,6 +431,7 @@ flight.flights
 
 
 };
+
 
 
 });
@@ -412,6 +451,9 @@ let returnFlights=[];
 
 
 
+
+
+
 /*
 ====================================
 RETURN SEARCH
@@ -423,8 +465,10 @@ DESTINATION → ORIGIN
 if(return_date){
 
 
+
 const returnParams =
 new URLSearchParams();
+
 
 
 
@@ -468,10 +512,12 @@ returnParams
 
 
 
+
 console.log(
 "🔥 RETURN KEYS:",
 Object.keys(returnData)
 );
+
 
 
 
@@ -496,14 +542,17 @@ returnRaw.length
 
 
 
+
+
 returnFlights =
 returnRaw.map((flight,index)=>{
 
 
-
 /*
-Find matching airline round-trip price
+MATCH AIRLINE TO KEEP
+ROUND TRIP GOOGLE PRICE
 */
+
 
 const match =
 departureRaw.find(
@@ -520,35 +569,38 @@ id:index,
 
 
 
-/*
-Google Flights behavior:
-Return cards display total round trip price
-*/
-
 price:
+
 match?.price ||
+
 departureRaw[0]?.price ||
+
 flight.price,
 
 
 
 airline:
+
 flight.airline,
 
 
 
 airline_logo:
+
 flight.airline_logo,
 
 
 
 duration:
+
 flight.duration,
 
 
 
 flights:
+
 flight.flights
+
 
 
 };
@@ -603,6 +655,8 @@ returnFlights[0]?.price
 
 
 
+
+
 return res.status(200).json({
 
 departure:
@@ -621,7 +675,10 @@ returnFlights
 
 
 
+
+
 catch(error){
+
 
 
 console.error(
