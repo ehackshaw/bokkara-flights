@@ -425,180 +425,9 @@ departureData
 
 
 
-const departureFlights =
-departureRaw.map((flight,index)=>{
-
-
-return {
-
-
-id:index,
-
-
-price:
-flight.price,
-
-
-
-airline:
-flight.airline,
-
-
-
-airline_logo:
-flight.airline_logo,
-
-
-
-duration:
-flight.duration,
-
-
-
-signature:
-flight.signature,
-
-
-
-flights:
-flight.flights
-
-
-};
-
-
-
-});
-
-
-
-
-
-
-
-
-
-let returnFlights=[];
-
-
-
-
-
-
-
-
-
-/*
-====================================
-RETURN SEARCH
-DESTINATION → ORIGIN
-====================================
-*/
-
-
-if(return_date){
-
-
-
-const returnParams =
-new URLSearchParams();
-
-
-
-
-returnParams.set(
-"departure_id",
-destination
-);
-
-
-
-returnParams.set(
-"arrival_id",
-origin
-);
-
-
-
-returnParams.set(
-"outbound_date",
-return_date
-);
-
-
-
-returnParams.set(
-"type",
-"2"
-);
-
-
-
-
-
-
-
-const returnData =
-await serpSearch(
-returnParams
-);
-
-
-
-
-
-
-console.log(
-"🔥 RETURN KEYS:",
-Object.keys(returnData)
-);
-
-
-
-
-
-
-const returnRaw =
-normalizeFlights(
-returnData
-);
-
-
-
-
-
-
-console.log(
-"🔥 RETURN COUNT:",
-returnRaw.length
-);
-
-
-
-
-
-
-
-
-
 returnFlights =
-returnRaw.map((flight,index)=>{
-
-
-
-
-
-/*
-====================================
-SMART PRICE MATCHING
-
-1. Exact itinerary match
-2. Airline fallback
-3. First available price
-====================================
-*/
-
-
+returnRaw
+.map((flight,index)=>{
 
 const exactMatch =
 departureRaw.find(
@@ -606,76 +435,46 @@ departureRaw.find(
 dep.signature === flight.signature
 );
 
-
-
-
 const airlineMatch =
 departureRaw.find(
 (dep)=>
 dep.airline === flight.airline
 );
 
-
-
-
-
-
+const matchedPrice =
+exactMatch?.price ||
+airlineMatch?.price ||
+departureRaw[0]?.price ||
+flight.price;
 
 return {
 
-
 id:index,
 
+price: matchedPrice,
 
-
-price:
-
-exactMatch?.price ||
-
-airlineMatch?.price ||
-
-departureRaw[0]?.price ||
-
-flight.price,
-
-
+matchedPrice,
 
 airline:
-
 flight.airline,
 
-
-
 airline_logo:
-
 flight.airline_logo,
 
-
-
 duration:
-
 flight.duration,
 
-
-
 signature:
-
 flight.signature,
 
-
-
 flights:
-
 flight.flights
-
-
 
 };
 
+})
 
-
-
-});
+.sort((a,b)=>a.price-b.price);
 
 
 
