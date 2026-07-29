@@ -89,10 +89,6 @@ params.set(
 );
 
 
-/*
-GET MORE GOOGLE FLIGHTS RESULTS
-*/
-
 params.set(
 "show_hidden",
 "true"
@@ -103,7 +99,6 @@ params.set(
 "sort_by",
 "2"
 );
-
 
 
 params.set(
@@ -176,6 +171,36 @@ return json;
 
 
 
+function createSignature(segments){
+
+
+return segments.map(segment=>{
+
+
+return [
+
+segment.departure_airport?.id || "",
+
+segment.arrival_airport?.id || "",
+
+segment.flight_number || ""
+
+].join("-");
+
+
+}).join("|");
+
+
+}
+
+
+
+
+
+
+
+
+
 function normalizeFlights(data){
 
 
@@ -193,6 +218,7 @@ console.log(
 "🔥 TOTAL RAW SERP FLIGHTS:",
 results.length
 );
+
 
 
 
@@ -234,6 +260,12 @@ segments[0]?.airline_logo ||
 duration:
 
 flight.total_duration || 0,
+
+
+
+signature:
+
+createSignature(segments),
 
 
 
@@ -280,7 +312,6 @@ body.departure_date;
 
 const return_date =
 body.return_date;
-
 
 
 
@@ -364,7 +395,6 @@ return_date ? "1" : "2"
 
 
 
-
 const departureData =
 await serpSearch(
 departureParams
@@ -389,7 +419,6 @@ const departureRaw =
 normalizeFlights(
 departureData
 );
-
 
 
 
@@ -423,6 +452,11 @@ flight.airline_logo,
 
 duration:
 flight.duration,
+
+
+
+signature:
+flight.signature,
 
 
 
@@ -503,6 +537,7 @@ returnParams.set(
 
 
 
+
 const returnData =
 await serpSearch(
 returnParams
@@ -532,6 +567,7 @@ returnData
 
 
 
+
 console.log(
 "🔥 RETURN COUNT:",
 returnRaw.length
@@ -544,21 +580,44 @@ returnRaw.length
 
 
 
+
 returnFlights =
 returnRaw.map((flight,index)=>{
 
 
+
+
+
 /*
-MATCH AIRLINE TO KEEP
-ROUND TRIP GOOGLE PRICE
+====================================
+SMART PRICE MATCHING
+
+1. Exact itinerary match
+2. Airline fallback
+3. First available price
+====================================
 */
 
 
-const match =
+
+const exactMatch =
+departureRaw.find(
+(dep)=>
+dep.signature === flight.signature
+);
+
+
+
+
+const airlineMatch =
 departureRaw.find(
 (dep)=>
 dep.airline === flight.airline
 );
+
+
+
+
 
 
 
@@ -571,7 +630,9 @@ id:index,
 
 price:
 
-match?.price ||
+exactMatch?.price ||
+
+airlineMatch?.price ||
 
 departureRaw[0]?.price ||
 
@@ -597,6 +658,12 @@ flight.duration,
 
 
 
+signature:
+
+flight.signature,
+
+
+
 flights:
 
 flight.flights
@@ -604,6 +671,7 @@ flight.flights
 
 
 };
+
 
 
 
@@ -657,6 +725,7 @@ returnFlights[0]?.price
 
 
 
+
 return res.status(200).json({
 
 departure:
@@ -672,8 +741,6 @@ returnFlights
 
 
 }
-
-
 
 
 
