@@ -96,6 +96,7 @@ process.env.SERPAPI_KEY
 
 
 
+
 const url =
 "https://serpapi.com/search.json?"
 +
@@ -110,6 +111,7 @@ process.env.SERPAPI_KEY,
 "HIDDEN"
 )
 );
+
 
 
 
@@ -132,7 +134,10 @@ response.status
 
 if(!response.ok){
 
-console.log(json);
+console.log(
+"SERP ERROR:",
+json
+);
 
 throw new Error(
 "SerpAPI ERROR "+response.status
@@ -153,9 +158,10 @@ return json;
 
 
 
-function getAllFlights(data){
+function normalizeFlights(data){
 
-return [
+
+const results = [
 
 ...(data.best_flights || []),
 
@@ -163,19 +169,9 @@ return [
 
 ];
 
-}
 
 
-
-
-
-
-
-function splitRoundTripFlight(
-flight,
-origin,
-destination
-){
+return results.map((flight,index)=>{
 
 
 const segments =
@@ -183,57 +179,48 @@ flight.flights || [];
 
 
 
-let outbound = [];
-
-let inbound = [];
+return {
 
 
-
-segments.forEach(segment=>{
-
-
-const from =
-segment.departure_airport?.id;
+id:index,
 
 
-const to =
-segment.arrival_airport?.id;
+price:
+flight.price || 0,
 
 
 
-// outbound POS -> PTY
-
-if(
-from === origin
-){
-
-outbound.push(segment);
-
-}
+airline:
+segments[0]?.airline ||
+"Airline",
 
 
-// return PTY -> POS
 
-else if(
-from === destination
-){
+airline_logo:
+segments[0]?.airline_logo ||
+"",
 
-inbound.push(segment);
 
-}
+
+duration:
+flight.total_duration || 0,
+
+
+
+departure_token:
+flight.departure_token || "",
+
+
+
+flights:
+segments
+
+
+
+};
 
 
 });
-
-
-
-return {
-
-outbound,
-
-inbound
-
-};
 
 
 }
@@ -271,6 +258,7 @@ body.return_date;
 
 
 
+
 if(
 !origin ||
 !destination ||
@@ -294,7 +282,7 @@ error:"Missing flight fields"
 
 /*
 ====================================
-GOOGLE FLIGHTS ROUND TRIP SEARCH
+ROUND TRIP SEARCH
 ====================================
 */
 
@@ -346,36 +334,34 @@ return_date ? "1" : "2"
 
 
 
-const data =
+const outboundData =
 await serpSearch(params);
 
 
 
 
-console.log(
-"🔥 BEST FLIGHT SAMPLE:",
-data.best_flights?.[0]
-);
-
-
 
 console.log(
-"🔥 OTHER FLIGHT SAMPLE:",
-data.other_flights?.[0]
+"🔥 OUTBOUND RESPONSE:",
+Object.keys(outboundData)
 );
 
 
 
 
-const rawFlights =
-getAllFlights(data);
+
+const outboundFlights =
+normalizeFlights(
+outboundData
+);
+
 
 
 
 
 console.log(
-"🔥 TOTAL RAW SERP FLIGHTS:",
-rawFlights.length
+"🔥 TOTAL OUTBOUND FLIGHTS:",
+outboundFlights.length
 );
 
 
@@ -392,117 +378,187 @@ let returnFlights = [];
 
 
 
-rawFlights.forEach(
-(flight,index)=>{
+
+for(
+let i=0;
+i<outboundFlights.length;
+i++
+){
+
+
+const flight =
+outboundFlights[i];
 
 
 
-const split =
-splitRoundTripFlight(
-flight,
-origin,
+
+/*
+====================================
+CREATE DEPARTURE CARD
+====================================
+*/
+
+
+departureFlights.push({
+
+
+id:i,
+
+
+price:
+flight.price,
+
+
+airline:
+flight.airline,
+
+
+airline_logo:
+flight.airline_logo,
+
+
+duration:
+flight.duration,
+
+
+departure_token:
+flight.departure_token,
+
+
+flights:
+flight.flights
+
+
+
+});
+
+
+
+
+
+
+
+
+/*
+====================================
+GET RETURN USING TOKEN
+====================================
+*/
+
+
+if(
+return_date &&
+flight.departure_token
+){
+
+
+try{
+
+
+const returnParams =
+new URLSearchParams();
+
+
+
+returnParams.set(
+"departure_token",
+flight.departure_token
+);
+
+
+
+/*
+SerpAPI requires these
+*/
+
+returnParams.set(
+"departure_id",
+origin
+);
+
+
+
+returnParams.set(
+"arrival_id",
 destination
+);
+
+
+
+returnParams.set(
+"type",
+"1"
 );
 
 
 
 
 
-/*
-=========================
-DEPARTURE CARD
-=========================
-*/
-
-
-if(split.outbound.length){
-
-
-departureFlights.push({
-
-
-id:index,
-
-
-price:
-flight.price || 0,
-
-
-airline:
-split.outbound[0]?.airline ||
-"Airline",
-
-
-
-airline_logo:
-split.outbound[0]?.airline_logo ||
-"",
-
-
-
-duration:
-flight.total_duration || 0,
-
-
-
-flights:
-split.outbound
-
-
-
-});
-
-
-
-}
+const returnData =
+await serpSearch(returnParams);
 
 
 
 
 
+console.log(
+"🔥 RETURN TOKEN RESPONSE:",
+Object.keys(returnData)
+);
 
 
-/*
-=========================
-RETURN CARD
-SAME ROUND TRIP PRICE
-=========================
-*/
 
 
-if(split.inbound.length){
+
+const returnResults =
+normalizeFlights(returnData);
+
+
+
+
+
+returnResults.forEach((ret)=>{
 
 
 returnFlights.push({
 
 
-id:index,
+id:i,
 
+
+/*
+IMPORTANT:
+Google Flights round trip price
+*/
 
 price:
-flight.price || 0,
+flight.price,
 
 
 
 airline:
-split.inbound[0]?.airline ||
-"Airline",
+ret.airline ||
+flight.airline,
 
 
 
 airline_logo:
-split.inbound[0]?.airline_logo ||
-"",
+ret.airline_logo ||
+flight.airline_logo,
 
 
 
 duration:
-flight.total_duration || 0,
+ret.duration,
 
 
 
 flights:
-split.inbound
+ret.flights
+
+
+
+});
 
 
 
@@ -511,10 +567,24 @@ split.inbound
 
 
 }
+catch(returnError){
+
+
+console.log(
+"⚠️ RETURN TOKEN FAILED:",
+returnError.message
+);
+
+
+}
 
 
 
-});
+}
+
+
+
+}
 
 
 
@@ -539,14 +609,19 @@ returnFlights.length
 console.log(
 "PRICE CHECK:",
 {
+
 departure:
 departureFlights[0]?.price,
+
 
 return:
 returnFlights[0]?.price
 
 }
+
 );
+
+
 
 
 
@@ -562,7 +637,9 @@ departureFlights,
 return:
 returnFlights
 
+
 });
+
 
 
 }
