@@ -48,6 +48,7 @@ Number(body.adults || 1);
 
 
 
+
 async function serpSearch(params){
 
 
@@ -149,6 +150,7 @@ return json;
 
 
 
+
 function normalizeFlights(data){
 
 
@@ -171,86 +173,39 @@ flight.flights || [];
 
 
 
-const first =
-segments[0] || {};
-
-
-
-const last =
-segments[segments.length - 1] || {};
-
-
-
 return {
 
 
 id:index,
 
 
+// IMPORTANT:
+// This is the Google Flights total itinerary price
 
 price:
 flight.price || 0,
 
 
 
+flights:
+segments,
+
+
 airline:
-
-first.airline ||
-
+segments[0]?.airline ||
 "Airline",
 
 
 
 airline_logo:
-
-first.airline_logo ||
-
+segments[0]?.airline_logo ||
 "",
 
 
 
-departure_airport:{
-
-
-id:
-
-first.departure_airport?.id || "",
-
-
-time:
-
-first.departure_airport?.time || ""
-
-},
-
-
-
-arrival_airport:{
-
-
-id:
-
-last.arrival_airport?.id || "",
-
-
-time:
-
-last.arrival_airport?.time || ""
-
-},
-
-
-
 duration:
-
-flight.total_duration || 0,
-
-
-
-flights:
-
-segments
-
+flight.total_duration ||
+0
 
 
 };
@@ -312,33 +267,34 @@ error:"Missing flight fields"
 
 
 
+
 /*
 ====================================
-ROUND TRIP GOOGLE FLIGHTS SEARCH
+GOOGLE FLIGHTS ROUND TRIP SEARCH
 ====================================
 */
 
 
-const flightParams =
+const params =
 new URLSearchParams();
 
 
 
-flightParams.set(
+params.set(
 "departure_id",
 origin
 );
 
 
 
-flightParams.set(
+params.set(
 "arrival_id",
 destination
 );
 
 
 
-flightParams.set(
+params.set(
 "outbound_date",
 departure_date
 );
@@ -347,7 +303,7 @@ departure_date
 
 if(return_date){
 
-flightParams.set(
+params.set(
 "return_date",
 return_date
 );
@@ -357,12 +313,11 @@ return_date
 
 
 /*
-Google Flights:
-1 = Round trip
-2 = One way
+1 = Round Trip
+2 = One Way
 */
 
-flightParams.set(
+params.set(
 "type",
 return_date ? "1" : "2"
 );
@@ -372,7 +327,16 @@ return_date ? "1" : "2"
 
 
 const flightData =
-await serpSearch(flightParams);
+await serpSearch(params);
+
+
+
+
+
+console.log(
+"RAW SERP KEYS:",
+Object.keys(flightData)
+);
 
 
 
@@ -388,7 +352,10 @@ flightData
 
 
 let departureFlights = [];
+
 let returnFlights = [];
+
+
 
 
 
@@ -397,55 +364,123 @@ let returnFlights = [];
 allFlights.forEach((flight,index)=>{
 
 
-let segments =
+const segments =
 flight.flights || [];
 
 
 
-let outboundSegments =
-segments.filter(segment=>{
+if(!segments.length){
 
-return (
+return;
 
-segment.departure_airport?.id === origin &&
-
-segment.arrival_airport?.id !== origin
-
-);
-
-});
-
-
-
-let inboundSegments =
-segments.filter(segment=>{
-
-return (
-
-segment.departure_airport?.id === destination
-
-);
-
-});
+}
 
 
 
 
 
 /*
-Create departure card
+Find where outbound ends
+and return begins
+
+Example:
+
+POS -> PTY
+PTY -> POS
+
+The return starts when
+departure airport equals destination
 */
+
+
+let returnStartIndex =
+segments.findIndex(segment =>
+
+segment.departure_airport?.id === destination
+
+);
+
+
+
+
+
+/*
+If no return leg exists,
+skip it
+*/
+
+if(
+return_date &&
+returnStartIndex === -1
+){
+
+return;
+
+}
+
+
+
+
+
+let outboundSegments =
+segments.slice(
+0,
+returnStartIndex === -1
+?
+segments.length
+:
+returnStartIndex
+);
+
+
+
+
+
+let inboundSegments =
+segments.slice(
+returnStartIndex
+);
+
+
+
+
+
+
+
+
+/*
+==============================
+DEPARTURE CARD
+==============================
+*/
+
 
 if(outboundSegments.length){
 
 
 departureFlights.push({
 
-...flight,
-
 id:index,
 
-flights:outboundSegments,
+
+price:
+flight.price,
+
+
+airline:
+flight.airline,
+
+
+airline_logo:
+flight.airline_logo,
+
+
+duration:
+flight.duration,
+
+
+flights:
+outboundSegments,
 
 
 departure_airport:
@@ -455,6 +490,7 @@ outboundSegments[0].departure_airport,
 arrival_airport:
 outboundSegments[outboundSegments.length-1].arrival_airport
 
+
 });
 
 
@@ -464,20 +500,47 @@ outboundSegments[outboundSegments.length-1].arrival_airport
 
 
 
+
+
+
 /*
-Create return card
+==============================
+RETURN CARD
+==============================
 */
 
-if(inboundSegments.length){
+
+if(
+return_date &&
+inboundSegments.length
+){
 
 
 returnFlights.push({
 
-...flight,
-
 id:index,
 
-flights:inboundSegments,
+
+// KEEP SAME GOOGLE FLIGHTS TOTAL PRICE
+
+price:
+flight.price,
+
+
+airline:
+flight.airline,
+
+
+airline_logo:
+flight.airline_logo,
+
+
+duration:
+flight.duration,
+
+
+flights:
+inboundSegments,
 
 
 departure_airport:
@@ -487,6 +550,7 @@ inboundSegments[0].departure_airport,
 arrival_airport:
 inboundSegments[inboundSegments.length-1].arrival_airport
 
+
 });
 
 
@@ -500,9 +564,11 @@ inboundSegments[inboundSegments.length-1].arrival_airport
 
 
 
+
+
 console.log(
-"ROUND TRIP PRICE SAMPLE:",
-allFlights[0]?.price
+"TOTAL ITINERARIES:",
+allFlights.length
 );
 
 
@@ -521,14 +587,26 @@ returnFlights.length
 
 
 
+console.log(
+"PRICE CHECK:",
+departureFlights[0]?.price,
+returnFlights[0]?.price
+);
+
+
+
 
 
 
 return res.status(200).json({
 
-departure:departureFlights,
+departure:
+departureFlights,
 
-return:returnFlights
+
+return:
+returnFlights
+
 
 });
 
