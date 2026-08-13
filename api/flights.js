@@ -1,484 +1,701 @@
-export default async function handler(req,res){
-
-res.setHeader(
-"Access-Control-Allow-Origin",
-"*"
-);
-
-res.setHeader(
-"Access-Control-Allow-Methods",
-"POST, OPTIONS"
-);
-
-res.setHeader(
-"Access-Control-Allow-Headers",
-"Content-Type"
-);
-
-if(req.method==="OPTIONS"){
-return res.status(200).end();
-}
-
-if(req.method!=="POST"){
-
-return res.status(405).json({
-error:"POST only"
-});
-
-}
+export default async function handler(req, res) {
 
-try{
+    res.setHeader(
+        "Access-Control-Allow-Origin",
+        "*"
+    );
 
-const body=req.body || {};
+    res.setHeader(
+        "Access-Control-Allow-Methods",
+        "POST, OPTIONS"
+    );
 
-console.log(
-"🔥 REQUEST:",
-body
-);
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
-const adults =
-Number(body.adults || 1);
 
-async function serpSearch(params){
+    if (req.method === "OPTIONS") {
+        return res.status(200).end();
+    }
 
-params.set(
-"engine",
-"google_flights"
-);
 
-params.set(
-"currency",
-"USD"
-);
+    if (req.method !== "POST") {
+        return res.status(405).json({
+            error: "POST only"
+        });
+    }
 
-params.set(
-"hl",
-"en"
-);
 
-params.set(
-"gl",
-"us"
-);
+    try {
 
-params.set(
-"adults",
-adults
-);
+        const body = req.body || {};
 
-params.set(
-"deep_search",
-"true"
-);
+        console.log(
+            "🔥 REQUEST:",
+            body
+        );
 
-params.set(
-"show_hidden",
-"true"
-);
 
-params.set(
-"sort_by",
-"2"
-);
+        const adults =
+            Number(body.adults || 1);
 
-params.set(
-"api_key",
-process.env.SERPAPI_KEY
-);
 
-const url =
-"https://serpapi.com/search.json?"
-+
-params.toString();
+        /*
+        =========================================================
+        SERPAPI SEARCH
+        =========================================================
+        */
 
-console.log(
-"SERP REQUEST:",
-url.replace(
-process.env.SERPAPI_KEY,
-"HIDDEN"
-)
-);
+        async function serpSearch(params) {
 
-const response =
-await fetch(url);
+            params.set(
+                "engine",
+                "google_flights"
+            );
 
-const json =
-await response.json();
+            params.set(
+                "currency",
+                "USD"
+            );
 
-console.log(
-"SERP STATUS:",
-response.status
-);
+            params.set(
+                "hl",
+                "en"
+            );
 
-if(!response.ok){
+            params.set(
+                "gl",
+                "us"
+            );
 
-console.log(
-"SERP ERROR:",
-json
-);
+            params.set(
+                "adults",
+                adults
+            );
 
-throw new Error(
-"SerpAPI ERROR "+response.status
-);
+            params.set(
+                "deep_search",
+                "true"
+            );
 
-}
+            params.set(
+                "show_hidden",
+                "true"
+            );
 
-return json;
+            params.set(
+                "sort_by",
+                "2"
+            );
 
-}
+            params.set(
+                "api_key",
+                process.env.SERPAPI_KEY
+            );
 
-function createSignature(segments){
 
-return segments.map(segment=>{
+            const url =
+                "https://serpapi.com/search.json?" +
+                params.toString();
 
-return [
 
-segment.departure_airport?.id || "",
+            console.log(
+                "SERP REQUEST:",
+                url.replace(
+                    process.env.SERPAPI_KEY,
+                    "HIDDEN"
+                )
+            );
 
-segment.arrival_airport?.id || "",
 
-segment.flight_number || ""
+            const response =
+                await fetch(url);
 
-].join("-");
 
-}).join("|");
+            const json =
+                await response.json();
 
-}
 
-function normalizeFlights(data){
+            console.log(
+                "SERP STATUS:",
+                response.status
+            );
 
-const results = [
 
-...(data.best_flights || []),
+            if (!response.ok) {
 
-...(data.other_flights || [])
+                console.log(
+                    "SERP ERROR:",
+                    json
+                );
 
-];
+                throw new Error(
+                    "SerpAPI ERROR " +
+                    response.status
+                );
 
-console.log(
-"🔥 TOTAL RAW SERP FLIGHTS:",
-results.length
-);
+            }
 
-return results.map((flight,index)=>{
 
-const segments =
-flight.flights || [];
+            return json;
 
-return {
+        }
 
-id:index,
 
-price:
-flight.price || 0,
 
-airline:
+        /*
+        =========================================================
+        CREATE FLIGHT SIGNATURE
+        =========================================================
+        */
 
-segments[0]?.airline ||
+        function createSignature(segments) {
 
-"Airline",
+            return segments
+                .map(segment => {
 
-airline_logo:
+                    return [
+                        segment.departure_airport?.id || "",
+                        segment.arrival_airport?.id || "",
+                        segment.flight_number || ""
+                    ].join("-");
 
-segments[0]?.airline_logo ||
+                })
+                .join("|");
 
-"",
+        }
 
-duration:
 
-flight.total_duration || 0,
 
-signature:
+        /*
+        =========================================================
+        NORMALIZE FLIGHTS
+        =========================================================
+        */
 
-createSignature(segments),
+        function normalizeFlights(data) {
 
-flights:
+            const results = [
 
-segments
+                ...(data.best_flights || []),
 
-};
+                ...(data.other_flights || [])
 
-});
+            ];
 
-}
 
-const origin =
-String(body.origin || "")
-.trim()
-.toUpperCase();
+            console.log(
+                "🔥 TOTAL RAW SERP FLIGHTS:",
+                results.length
+            );
 
-const destination =
-String(body.destination || "")
-.trim()
-.toUpperCase();
 
-const departure_date =
-body.departure_date;
+            return results.map((flight, index) => {
 
-const return_date =
-body.return_date;
+                const segments =
+                    flight.flights || [];
 
-if(
-!origin ||
-!destination ||
-!departure_date
-){
 
-return res.status(400).json({
+                return {
 
-error:"Missing flight fields"
+                    id: index,
 
-});
+                    price:
+                        flight.price || 0,
 
-}
+                    airline:
+                        segments[0]?.airline ||
+                        "Airline",
 
-/*
+                    airline_logo:
+                        segments[0]?.airline_logo ||
+                        "",
 
-*/
+                    duration:
+                        flight.total_duration ||
+                        0,
 
-const departureParams =
-new URLSearchParams();
+                    signature:
+                        createSignature(segments),
 
-departureParams.set(
-"departure_id",
-origin
-);
+                    flights:
+                        segments,
 
-departureParams.set(
-"arrival_id",
-destination
-);
+                    /*
+                    =================================================
+                    IMPORTANT
+                    =================================================
+                    Keep the departure token.
+                    This token identifies this exact outbound
+                    itinerary and is required to retrieve its
+                    compatible return flights.
+                    =================================================
+                    */
 
-departureParams.set(
-"outbound_date",
-departure_date
-);
+                    departure_token:
+                        flight.departure_token ||
+                        "",
 
-if(return_date){
+                    booking_token:
+                        flight.booking_token ||
+                        ""
 
-departureParams.set(
-"return_date",
-return_date
-);
+                };
 
-}
+            });
 
-departureParams.set(
-"type",
-return_date ? "1" : "2"
-);
+        }
 
-const departureData =
-await serpSearch(
-departureParams
-);
 
-console.log(
-"🔥 DEPARTURE KEYS:",
-Object.keys(departureData)
-);
 
-const departureRaw =
-normalizeFlights(
-departureData
-);
+        /*
+        =========================================================
+        REQUEST VALUES
+        =========================================================
+        */
 
-const departureFlights =
-departureRaw.map((flight,index)=>{
+        const origin =
+            String(
+                body.origin || ""
+            )
+            .trim()
+            .toUpperCase();
 
-return {
 
-id:index,
+        const destination =
+            String(
+                body.destination || ""
+            )
+            .trim()
+            .toUpperCase();
 
-price:
-flight.price,
 
-airline:
-flight.airline,
+        const departure_date =
+            body.departure_date;
 
-airline_logo:
-flight.airline_logo,
 
-duration:
-flight.duration,
+        const return_date =
+            body.return_date;
 
-signature:
-flight.signature,
 
-flights:
-flight.flights
+        const departure_token =
+            String(
+                body.departure_token || ""
+            ).trim();
 
-};
 
-});
 
-let returnFlights=[];
+        /*
+        =========================================================
+        VALIDATE
+        =========================================================
+        */
 
-/*
+        if (
+            !origin ||
+            !destination ||
+            !departure_date
+        ) {
 
-*/
+            return res.status(400).json({
 
-if(return_date){
+                error:
+                    "Missing flight fields"
 
-const returnParams =
-new URLSearchParams();
+            });
 
-returnParams.set(
-"departure_id",
-destination
-);
+        }
 
-returnParams.set(
-"arrival_id",
-origin
-);
 
-returnParams.set(
-"outbound_date",
-return_date
-);
 
-returnParams.set(
-"type",
-"2"
-);
+        /*
+        =========================================================
+        STAGE 2
+        =========================================================
 
-const returnData =
-await serpSearch(
-returnParams
-);
+        If a departure_token is supplied, the user has already
+        selected an outbound flight.
 
-console.log(
-"🔥 RETURN KEYS:",
-Object.keys(returnData)
-);
+        We now ask Google Flights for the compatible return
+        flights for THAT EXACT outbound flight.
 
-const returnRaw =
-normalizeFlights(
-returnData
-);
+        =========================================================
+        */
 
-console.log(
-"🔥 RETURN COUNT:",
-returnRaw.length
-);
+        if (departure_token) {
 
-returnFlights =
-returnRaw.map((flight,index)=>{
+            console.log(
+                "🔥 RETURN SEARCH USING DEPARTURE TOKEN"
+            );
 
-/*
 
-SMART PRICE MATCHING
+            const returnParams =
+                new URLSearchParams();
 
-Exact itinerary match
-Airline fallback
-First available price
-====================================
-*/
 
-const exactMatch =
-departureRaw.find(
-(dep)=>
-dep.signature === flight.signature
-);
+            returnParams.set(
+                "departure_id",
+                origin
+            );
 
-const airlineMatch =
-departureRaw.find(
-(dep)=>
-dep.airline === flight.airline
-);
 
-return {
+            returnParams.set(
+                "arrival_id",
+                destination
+            );
 
-id:index,
 
-price:
+            returnParams.set(
+                "outbound_date",
+                departure_date
+            );
 
-exactMatch?.price ||
 
-airlineMatch?.price ||
+            if (return_date) {
 
-departureRaw[0]?.price ||
+                returnParams.set(
+                    "return_date",
+                    return_date
+                );
 
-flight.price,
+            }
 
-airline:
 
-flight.airline,
+            returnParams.set(
+                "type",
+                "1"
+            );
 
-airline_logo:
 
-flight.airline_logo,
+            /*
+            =====================================================
+            THIS IS THE IMPORTANT PART
+            =====================================================
+            */
 
-duration:
+            returnParams.set(
+                "departure_token",
+                departure_token
+            );
 
-flight.duration,
 
-signature:
+            const returnData =
+                await serpSearch(
+                    returnParams
+                );
 
-flight.signature,
 
-flights:
+            console.log(
+                "🔥 TOKEN RETURN KEYS:",
+                Object.keys(returnData)
+            );
 
-flight.flights
 
-};
+            const returnRaw =
+                normalizeFlights(
+                    returnData
+                );
 
-});
 
-}
+            /*
+            =====================================================
+            RETURN PRICE IS NOW THE ACTUAL ROUND-TRIP PRICE
+            =====================================================
 
-console.log(
-"DEPARTURES:",
-departureFlights.length
-);
+            SerpAPI returns the price associated with the
+            selected outbound + return itinerary.
 
-console.log(
-"RETURNS:",
-returnFlights.length
-);
+            We do NOT copy the outbound price.
+            We do NOT search the return route independently.
+            We do NOT match by airline.
+            =====================================================
+            */
 
-console.log(
-"PRICE CHECK:",
-{
 
-departure:
-departureFlights[0]?.price,
+            const returnFlights =
+                returnRaw.map((flight, index) => {
 
-return:
-returnFlights[0]?.price
+                    return {
 
-}
+                        id: index,
 
-);
+                        price:
+                            flight.price,
 
-return res.status(200).json({
+                        airline:
+                            flight.airline,
 
-departure:
-departureFlights,
+                        airline_logo:
+                            flight.airline_logo,
 
-return:
-returnFlights
+                        duration:
+                            flight.duration,
 
-});
+                        signature:
+                            flight.signature,
 
-}
+                        departure_token:
+                            flight.departure_token,
 
-catch(error){
+                        booking_token:
+                            flight.booking_token,
 
-console.error(
-"🔥 BACKEND ERROR:",
-error
-);
+                        flights:
+                            flight.flights
 
-return res.status(500).json({
+                    };
 
-error:"Server crashed",
+                });
 
-message:error.message
 
-});
+            console.log(
+                "🔥 TOKEN RETURN COUNT:",
+                returnFlights.length
+            );
 
-}
+
+            console.log(
+                "🔥 CORRECT ROUND TRIP PRICES:",
+                returnFlights.map(
+                    flight => ({
+                        airline:
+                            flight.airline,
+
+                        price:
+                            flight.price
+                    })
+                )
+            );
+
+
+            return res.status(200).json({
+
+                departure: [],
+
+                return:
+                    returnFlights,
+
+                mode:
+                    "return_by_departure_token"
+
+            });
+
+        }
+
+
+
+        /*
+        =========================================================
+        STAGE 1
+        =========================================================
+
+        Initial round-trip search.
+
+        DO NOT perform a separate return search here.
+
+        Google Flights returns outbound flights with a
+        departure_token.
+
+        =========================================================
+        */
+
+        const departureParams =
+            new URLSearchParams();
+
+
+        departureParams.set(
+            "departure_id",
+            origin
+        );
+
+
+        departureParams.set(
+            "arrival_id",
+            destination
+        );
+
+
+        departureParams.set(
+            "outbound_date",
+            departure_date
+        );
+
+
+        if (return_date) {
+
+            departureParams.set(
+                "return_date",
+                return_date
+            );
+
+        }
+
+
+        /*
+        =========================================================
+        ROUND TRIP
+        =========================================================
+        */
+
+        departureParams.set(
+            "type",
+            return_date
+                ? "1"
+                : "2"
+        );
+
+
+
+        const departureData =
+            await serpSearch(
+                departureParams
+            );
+
+
+        console.log(
+            "🔥 DEPARTURE KEYS:",
+            Object.keys(departureData)
+        );
+
+
+        const departureRaw =
+            normalizeFlights(
+                departureData
+            );
+
+
+        /*
+        =========================================================
+        DEPARTURE FLIGHTS
+        =========================================================
+
+        IMPORTANT:
+        Keep departure_token in every flight.
+
+        The frontend will send this token back after the
+        customer selects a departure.
+        =========================================================
+        */
+
+        const departureFlights =
+            departureRaw.map(
+                (flight, index) => {
+
+                    return {
+
+                        id: index,
+
+                        price:
+                            flight.price,
+
+                        airline:
+                            flight.airline,
+
+                        airline_logo:
+                            flight.airline_logo,
+
+                        duration:
+                            flight.duration,
+
+                        signature:
+                            flight.signature,
+
+                        departure_token:
+                            flight.departure_token,
+
+                        booking_token:
+                            flight.booking_token,
+
+                        flights:
+                            flight.flights
+
+                    };
+
+                }
+            );
+
+
+
+        /*
+        =========================================================
+        IMPORTANT
+        =========================================================
+
+        We intentionally DO NOT do this anymore:
+
+        JFK → POS
+
+        as a separate search.
+
+        That was the source of the incorrect return pricing.
+
+        =========================================================
+        */
+
+
+        console.log(
+            "🔥 DEPARTURES:",
+            departureFlights.length
+        );
+
+
+        console.log(
+            "🔥 DEPARTURE TOKENS:",
+            departureFlights.map(
+                flight => ({
+                    airline:
+                        flight.airline,
+
+                    price:
+                        flight.price,
+
+                    token:
+                        flight.departure_token
+                            ? "YES"
+                            : "NO"
+                })
+            )
+        );
+
+
+        return res.status(200).json({
+
+            departure:
+                departureFlights,
+
+            return:
+                [],
+
+            mode:
+                return_date
+                    ? "round_trip_initial"
+                    : "one_way"
+
+        });
+
+    }
+
+
+    catch (error) {
+
+        console.error(
+            "🔥 BACKEND ERROR:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            error:
+                "Server crashed",
+
+            message:
+                error.message
+
+        });
+
+    }
 
 }
