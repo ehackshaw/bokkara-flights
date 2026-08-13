@@ -1,4 +1,4 @@
- export default async function handler(req, res) {
+export default async function handler(req, res) {
 
     res.setHeader(
         "Access-Control-Allow-Origin",
@@ -20,11 +20,9 @@
     }
 
     if (req.method !== "POST") {
-
         return res.status(405).json({
             error: "POST only"
         });
-
     }
 
     try {
@@ -35,7 +33,6 @@
             "🔥 REQUEST:",
             body
         );
-
 
         const adults =
             Number(body.adults || 1);
@@ -74,24 +71,6 @@
                 String(adults)
             );
 
-            /*
-            IMPORTANT:
-
-            deep_search should only be used for
-            round-trip searches.
-            */
-
-            if (
-                params.get("type") === "1"
-            ) {
-
-                params.set(
-                    "deep_search",
-                    "true"
-                );
-
-            }
-
             params.set(
                 "show_hidden",
                 "true"
@@ -100,6 +79,16 @@
             params.set(
                 "sort_by",
                 "2"
+            );
+
+            /*
+            Deep search for initial round-trip
+            and token return searches.
+            */
+
+            params.set(
+                "deep_search",
+                "true"
             );
 
             params.set(
@@ -201,7 +190,7 @@
 
         /*
         =========================================================
-        NORMALIZE SERPAPI FLIGHTS
+        NORMALIZE FLIGHTS
         =========================================================
         */
 
@@ -229,73 +218,56 @@
                         flight.flights || [];
 
 
+                    const price =
+                        Number(
+                            flight.price || 0
+                        );
+
+
                     return {
 
                         id: index,
 
-                        /*
-                        IMPORTANT:
-
-                        For a round-trip search this is
-                        the round-trip ticket price.
-                        */
-
-                        price:
-                            Number(
-                                flight.price || 0
-                            ),
-
-
-                        /*
-                        Explicit copy so the frontend
-                        knows this is the round-trip price.
-                        */
+                        price: price,
 
                         round_trip_price:
-                            Number(
-                                flight.price || 0
-                            ),
-
+                            price,
 
                         airline:
                             segments[0]?.airline ||
                             "Airline",
-
 
                         airline_logo:
                             segments[0]?.airline_logo ||
                             flight.airline_logo ||
                             "",
 
-
                         duration:
                             flight.total_duration ||
+                            flight.total_time_taken ||
                             0,
-
 
                         signature:
                             createSignature(
                                 segments
                             ),
 
-
                         flights:
                             segments,
 
-
                         /*
-                        THIS IS THE IMPORTANT PART.
+                        IMPORTANT:
+                        This token is what allows us
+                        to retrieve the return flights.
                         */
 
                         departure_token:
                             flight.departure_token ||
                             null,
 
-
                         booking_token:
                             flight.booking_token ||
                             null,
-
 
                         type:
                             flight.type ||
@@ -311,7 +283,7 @@
 
         /*
         =========================================================
-        BASIC REQUEST VALUES
+        REQUEST VALUES
         =========================================================
         */
 
@@ -332,26 +304,16 @@
 
 
         const departure_date =
-            body.departure_date;
+            body.departure_date || "";
 
 
         const return_date =
-            body.return_date;
+            body.return_date || "";
 
 
         /*
         =========================================================
         SELECTED DEPARTURE TOKEN
-        =========================================================
-
-        When the user selects a departure flight,
-        the frontend will send this token back.
-
-        If this exists, we DO NOT perform another
-        JFK → POS one-way search.
-
-        We retrieve the actual return options
-        belonging to the selected departure.
         =========================================================
         */
 
@@ -363,7 +325,218 @@
 
         /*
         =========================================================
-        VALIDATE
+        MODE 1
+        SELECTED DEPARTURE → RETURN FLIGHTS
+        =========================================================
+
+        THIS MUST COME FIRST.
+
+        A token request is different from the
+        original search.
+        =========================================================
+        */
+
+        if (selectedDepartureToken) {
+
+            console.log(
+                "🔥 MODE: SELECTED DEPARTURE RETURN SEARCH"
+            );
+
+
+            console.log(
+                "🔥 DEPARTURE TOKEN RECEIVED:",
+                selectedDepartureToken
+            );
+
+
+            /*
+            =====================================================
+            SERPAPI TOKEN REQUEST
+
+            SerpApi documentation:
+
+            departure_token is used to select a
+            departure flight and retrieve the
+            returning flights for a round trip.
+            =====================================================
+            */
+
+            const returnParams =
+                new URLSearchParams();
+
+
+            returnParams.set(
+                "type",
+                "1"
+            );
+
+
+            returnParams.set(
+                "departure_token",
+                selectedDepartureToken
+            );
+
+
+            /*
+            IMPORTANT:
+
+            Do NOT send:
+
+            departure_id
+            arrival_id
+            outbound_date
+
+            because the departure_token already
+            identifies the selected outbound itinerary.
+            */
+
+
+            const returnData =
+                await serpSearch(
+                    returnParams
+                );
+
+
+            console.log(
+                "🔥 RETURN RESPONSE KEYS:",
+                Object.keys(
+                    returnData
+                )
+            );
+
+
+            console.log(
+                "🔥 RETURN BEST FLIGHTS:",
+                (returnData.best_flights || []).length
+            );
+
+
+            console.log(
+                "🔥 RETURN OTHER FLIGHTS:",
+                (returnData.other_flights || []).length
+            );
+
+
+            const returnRaw =
+                normalizeFlights(
+                    returnData
+                );
+
+
+            console.log(
+                "🔥 RETURN COUNT:",
+                returnRaw.length
+            );
+
+
+            /*
+            =====================================================
+            RETURN RESULTS
+            =====================================================
+            */
+
+            const returnFlights =
+                returnRaw.map(
+                    (flight, index) => {
+
+                        return {
+
+                            id: index,
+
+                            /*
+                            SerpApi returns the price
+                            associated with the selected
+                            departure + return combination.
+                            */
+
+                            price:
+                                flight.price,
+
+                            round_trip_price:
+                                flight.round_trip_price,
+
+                            airline:
+                                flight.airline,
+
+                            airline_logo:
+                                flight.airline_logo,
+
+                            duration:
+                                flight.duration,
+
+                            signature:
+                                flight.signature,
+
+                            flights:
+                                flight.flights,
+
+                            booking_token:
+                                flight.booking_token,
+
+                            departure_token:
+                                flight.departure_token,
+
+                            type:
+                                flight.type
+
+                        };
+
+                    }
+                );
+
+
+            /*
+            =====================================================
+            RETURN PRICE DEBUG
+            =====================================================
+            */
+
+            console.log(
+                "🔥 RETURN PRICE CHECK:",
+                returnFlights
+                    .slice(0, 10)
+                    .map(flight => ({
+
+                        airline:
+                            flight.airline,
+
+                        price:
+                            flight.price,
+
+                        round_trip_price:
+                            flight.round_trip_price,
+
+                        signature:
+                            flight.signature,
+
+                        has_booking_token:
+                            !!flight.booking_token
+
+                    }))
+            );
+
+
+            return res.status(200).json({
+
+                departure: [],
+
+                return:
+                    returnFlights,
+
+                return_requires_selection:
+                    false,
+
+                pricing_mode:
+                    "google_round_trip_departure_token"
+
+            });
+
+        }
+
+
+        /*
+        =========================================================
+        VALIDATE INITIAL SEARCH
         =========================================================
         */
 
@@ -385,19 +558,15 @@
 
         /*
         =========================================================
-        MODE 1
-        INITIAL ROUND-TRIP SEARCH
+        MODE 2
+        INITIAL ROUND TRIP SEARCH
         =========================================================
         */
 
-        if (
-            return_date &&
-            !selectedDepartureToken
-        ) {
+        if (return_date) {
 
             console.log(
-                "🔥 MODE:",
-                "INITIAL ROUND TRIP SEARCH"
+                "🔥 MODE: INITIAL ROUND TRIP SEARCH"
             );
 
 
@@ -436,7 +605,9 @@
 
 
             /*
-            Google Flights round-trip search.
+            =====================================================
+            INITIAL GOOGLE FLIGHTS ROUND TRIP SEARCH
+            =====================================================
             */
 
             const departureData =
@@ -476,47 +647,33 @@
                             price:
                                 flight.price,
 
-
-                            /*
-                            Explicit round-trip price.
-                            */
-
                             round_trip_price:
                                 flight.round_trip_price,
-
 
                             airline:
                                 flight.airline,
 
-
                             airline_logo:
                                 flight.airline_logo,
-
 
                             duration:
                                 flight.duration,
 
-
                             signature:
                                 flight.signature,
-
 
                             flights:
                                 flight.flights,
 
-
                             /*
-                            FRONTEND NEEDS THIS
-                            WHEN USER SELECTS THE FLIGHT.
+                            CRITICAL TOKEN
                             */
 
                             departure_token:
                                 flight.departure_token,
 
-
                             booking_token:
                                 flight.booking_token,
-
 
                             type:
                                 flight.type
@@ -529,7 +686,7 @@
 
             /*
             =====================================================
-            LOG TOKEN AVAILABILITY
+            TOKEN DEBUG
             =====================================================
             */
 
@@ -567,9 +724,6 @@
                         round_trip_price:
                             flight.round_trip_price,
 
-                        signature:
-                            flight.signature,
-
                         has_departure_token:
                             !!flight.departure_token
 
@@ -579,13 +733,13 @@
 
             /*
             =====================================================
-            IMPORTANT
+            INITIAL RESPONSE
 
-            We intentionally DO NOT perform a separate
-            one-way return search here.
+            We intentionally do NOT search JFK → POS
+            here.
 
-            The return flights are retrieved only after
-            the user selects a departure.
+            Return flights will be requested after
+            the customer selects a departure.
             =====================================================
             */
 
@@ -594,238 +748,10 @@
                 departure:
                     departureFlights,
 
-
-                return:
-                    [],
-
-
-                /*
-                Tell frontend that it must select a
-                departure before returns are loaded.
-                */
+                return: [],
 
                 return_requires_selection:
                     true,
-
-
-                pricing_mode:
-                    "google_round_trip_departure_token"
-
-            });
-
-        }
-
-
-        /*
-        =========================================================
-        MODE 2
-        GET RETURNS FOR SELECTED DEPARTURE
-        =========================================================
-        */
-
-        if (
-            return_date &&
-            selectedDepartureToken
-        ) {
-
-            console.log(
-                "🔥 MODE:",
-                "SELECTED DEPARTURE RETURN SEARCH"
-            );
-
-
-            console.log(
-                "🔥 USING DEPARTURE TOKEN"
-            );
-
-
-            /*
-            =====================================================
-            SERPAPI RETURN REQUEST
-
-            This is the critical difference.
-
-            We are NOT doing:
-
-            JFK → POS type=2
-
-            We are doing:
-
-            departure_token = selected departure
-
-            This tells Google Flights which exact
-            outbound itinerary the customer selected.
-            =====================================================
-            */
-
-            const returnParams =
-                new URLSearchParams();
-
-
-            returnParams.set(
-                "type",
-                "1"
-            );
-
-
-            returnParams.set(
-                "departure_token",
-                selectedDepartureToken
-            );
-
-
-            returnParams.set(
-                "return_date",
-                return_date
-            );
-
-
-            const returnData =
-                await serpSearch(
-                    returnParams
-                );
-
-
-            console.log(
-                "🔥 RETURN KEYS:",
-                Object.keys(
-                    returnData
-                )
-            );
-
-
-            /*
-            =====================================================
-            NORMALIZE RETURN RESULTS
-            =====================================================
-            */
-
-            const returnRaw =
-                normalizeFlights(
-                    returnData
-                );
-
-
-            console.log(
-                "🔥 RETURN COUNT:",
-                returnRaw.length
-            );
-
-
-            /*
-            =====================================================
-            RETURN RESULTS
-
-            IMPORTANT:
-
-            We do NOT replace the price.
-
-            We do NOT match by airline.
-
-            We do NOT use departureRaw[0].
-
-            We use the actual price returned by
-            Google Flights for this selected departure
-            + each return option.
-            =====================================================
-            */
-
-            const returnFlights =
-                returnRaw.map(
-                    (flight, index) => {
-
-                        return {
-
-                            id: index,
-
-
-                            /*
-                            THIS IS NOW THE ACTUAL
-                            ROUND-TRIP PRICE.
-                            */
-
-                            price:
-                                flight.price,
-
-
-                            round_trip_price:
-                                flight.round_trip_price,
-
-
-                            airline:
-                                flight.airline,
-
-
-                            airline_logo:
-                                flight.airline_logo,
-
-
-                            duration:
-                                flight.duration,
-
-
-                            signature:
-                                flight.signature,
-
-
-                            flights:
-                                flight.flights,
-
-
-                            booking_token:
-                                flight.booking_token,
-
-
-                            type:
-                                flight.type
-
-                        };
-
-                    }
-                );
-
-
-            /*
-            =====================================================
-            LOG RETURN PRICING
-            =====================================================
-            */
-
-            console.log(
-                "🔥 RETURN PRICE CHECK:",
-                returnFlights.map(
-                    flight => ({
-
-                        airline:
-                            flight.airline,
-
-                        price:
-                            flight.price,
-
-                        round_trip_price:
-                            flight.round_trip_price,
-
-                        signature:
-                            flight.signature
-
-                    })
-                )
-            );
-
-
-            return res.status(200).json({
-
-                departure:
-                    [],
-
-
-                return:
-                    returnFlights,
-
-
-                return_requires_selection:
-                    false,
-
 
                 pricing_mode:
                     "google_round_trip_departure_token"
@@ -842,152 +768,121 @@
         =========================================================
         */
 
-        if (
-            !return_date &&
-            !selectedDepartureToken
-        ) {
+        console.log(
+            "🔥 MODE: ONE WAY SEARCH"
+        );
 
-            console.log(
-                "🔥 MODE:",
-                "ONE WAY SEARCH"
+
+        const oneWayParams =
+            new URLSearchParams();
+
+
+        oneWayParams.set(
+            "departure_id",
+            origin
+        );
+
+
+        oneWayParams.set(
+            "arrival_id",
+            destination
+        );
+
+
+        oneWayParams.set(
+            "outbound_date",
+            departure_date
+        );
+
+
+        oneWayParams.set(
+            "type",
+            "2"
+        );
+
+
+        const oneWayData =
+            await serpSearch(
+                oneWayParams
             );
 
 
-            const oneWayParams =
-                new URLSearchParams();
+        console.log(
+            "🔥 ONE WAY KEYS:",
+            Object.keys(
+                oneWayData
+            )
+        );
 
 
-            oneWayParams.set(
-                "departure_id",
-                origin
+        const oneWayRaw =
+            normalizeFlights(
+                oneWayData
             );
 
 
-            oneWayParams.set(
-                "arrival_id",
-                destination
+        const oneWayFlights =
+            oneWayRaw.map(
+                (flight, index) => {
+
+                    return {
+
+                        id: index,
+
+                        price:
+                            flight.price,
+
+                        round_trip_price:
+                            null,
+
+                        airline:
+                            flight.airline,
+
+                        airline_logo:
+                            flight.airline_logo,
+
+                        duration:
+                            flight.duration,
+
+                        signature:
+                            flight.signature,
+
+                        flights:
+                            flight.flights,
+
+                        departure_token:
+                            flight.departure_token,
+
+                        booking_token:
+                            flight.booking_token,
+
+                        type:
+                            flight.type
+
+                    };
+
+                }
             );
 
 
-            oneWayParams.set(
-                "outbound_date",
-                departure_date
-            );
+        console.log(
+            "🔥 ONE WAY COUNT:",
+            oneWayFlights.length
+        );
 
 
-            oneWayParams.set(
-                "type",
-                "2"
-            );
+        return res.status(200).json({
 
+            departure:
+                oneWayFlights,
 
-            const oneWayData =
-                await serpSearch(
-                    oneWayParams
-                );
+            return: [],
 
+            return_requires_selection:
+                false,
 
-            console.log(
-                "🔥 ONE WAY KEYS:",
-                Object.keys(
-                    oneWayData
-                )
-            );
-
-
-            const oneWayRaw =
-                normalizeFlights(
-                    oneWayData
-                );
-
-
-            const oneWayFlights =
-                oneWayRaw.map(
-                    (flight, index) => {
-
-                        return {
-
-                            id: index,
-
-                            price:
-                                flight.price,
-
-
-                            round_trip_price:
-                                null,
-
-
-                            airline:
-                                flight.airline,
-
-
-                            airline_logo:
-                                flight.airline_logo,
-
-
-                            duration:
-                                flight.duration,
-
-
-                            signature:
-                                flight.signature,
-
-
-                            flights:
-                                flight.flights,
-
-
-                            booking_token:
-                                flight.booking_token,
-
-
-                            type:
-                                flight.type
-
-                        };
-
-                    }
-                );
-
-
-            console.log(
-                "🔥 ONE WAY COUNT:",
-                oneWayFlights.length
-            );
-
-
-            return res.status(200).json({
-
-                departure:
-                    oneWayFlights,
-
-
-                return:
-                    [],
-
-
-                return_requires_selection:
-                    false,
-
-
-                pricing_mode:
-                    "one_way"
-
-            });
-
-        }
-
-
-        /*
-        =========================================================
-        INVALID MODE
-        =========================================================
-        */
-
-        return res.status(400).json({
-
-            error:
-                "Invalid flight search request"
+            pricing_mode:
+                "one_way"
 
         });
 
@@ -1006,7 +901,6 @@
 
             error:
                 "Server crashed",
-
 
             message:
                 error.message
