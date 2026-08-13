@@ -322,46 +322,114 @@ export default async function handler(req, res) {
         /*
         =========================================================
         STAGE 2
-        SELECTED DEPARTURE
+        SELECTED DEPARTURE TOKEN
         =========================================================
 
-        If departure_token exists, retrieve the RETURN
-        flights associated with that exact outbound flight.
+        The token must belong to the CURRENT search.
 
-        IMPORTANT:
+        We therefore do NOT blindly trust a token sent from
+        the browser.
 
-        We use the ORIGINAL route:
+        First we decode the token enough to determine whether
+        it references the current route/date.
 
-        origin      = POS
-        destination = JFK
-
-        NOT:
-
-        origin      = JFK
-        destination = POS
-
-        The departure_token tells Google Flights which
-        outbound flight was selected.
+        If it does not match the current search, we IGNORE it
+        and perform a normal return search instead.
         =========================================================
         */
 
-        if (departure_token) {
+        let tokenIsValidForCurrentSearch = false;
 
-            if (!return_date) {
 
-                return res.status(400).json({
+        if (
+            departure_token &&
+            return_date
+        ) {
 
-                    error:
-                        "Return date required for departure token search"
+            try {
 
-                });
+                const decoded =
+                    Buffer.from(
+                        departure_token,
+                        "base64"
+                    ).toString("utf8");
+
+
+                console.log(
+                    "🔥 TOKEN DECODED:",
+                    decoded
+                );
+
+
+                /*
+                Google Flights tokens are not intended
+                as a permanent database format.
+
+                We only use this check as a safety mechanism.
+
+                The token must contain the current route
+                somewhere in its decoded representation.
+                */
+
+                const decodedUpper =
+                    decoded.toUpperCase();
+
+
+                const routeMatches =
+                    decodedUpper.includes(origin) &&
+                    decodedUpper.includes(destination);
+
+
+                const departureDateMatches =
+                    decodedUpper.includes(
+                        departure_date
+                    );
+
+
+                if (
+                    routeMatches &&
+                    departureDateMatches
+                ) {
+
+                    tokenIsValidForCurrentSearch =
+                        true;
+
+                }
+
+            }
+            catch(tokenError) {
+
+                console.log(
+                    "⚠️ TOKEN COULD NOT BE DECODED"
+                );
 
             }
 
+        }
+
+
+
+        console.log(
+            "🔥 TOKEN VALID FOR CURRENT SEARCH:",
+            tokenIsValidForCurrentSearch
+        );
+
+
+
+        /*
+        =========================================================
+        TOKEN SEARCH
+        =========================================================
+        */
+
+        if (
+            departure_token &&
+            return_date &&
+            tokenIsValidForCurrentSearch
+        ) {
 
             console.log(
-                "🔥 USING DEPARTURE TOKEN:",
-                departure_token
+                "🔥 USING CURRENT DEPARTURE TOKEN"
             );
 
 
@@ -370,9 +438,12 @@ export default async function handler(req, res) {
 
 
             /*
-            =====================================================
-            ORIGINAL ROUND TRIP ROUTE
-            =====================================================
+            IMPORTANT:
+
+            For Google Flights departure-token searches,
+            retain the original round-trip route.
+
+            The token identifies the selected outbound.
             */
 
             returnParams.set(
@@ -405,12 +476,6 @@ export default async function handler(req, res) {
             );
 
 
-            /*
-            =====================================================
-            SELECTED OUTBOUND
-            =====================================================
-            */
-
             returnParams.set(
                 "departure_token",
                 departure_token
@@ -420,125 +485,164 @@ export default async function handler(req, res) {
             console.log(
                 "🔥 RETURN TOKEN PARAMS:",
                 {
-                    departure_id: origin,
-                    arrival_id: destination,
-                    outbound_date: departure_date,
-                    return_date: return_date,
-                    type: "1",
-                    has_departure_token: true
+                    departure_id:
+                        origin,
+
+                    arrival_id:
+                        destination,
+
+                    outbound_date:
+                        departure_date,
+
+                    return_date:
+                        return_date,
+
+                    type:
+                        "1",
+
+                    has_departure_token:
+                        true
                 }
             );
 
 
-            const returnData =
-                await serpSearch(
-                    returnParams
+            try {
+
+                const returnData =
+                    await serpSearch(
+                        returnParams
+                    );
+
+
+                console.log(
+                    "🔥 RETURN TOKEN RESPONSE KEYS:",
+                    Object.keys(
+                        returnData
+                    )
                 );
 
 
-            console.log(
-                "🔥 RETURN TOKEN RESPONSE KEYS:",
-                Object.keys(returnData)
-            );
+                const returnRaw =
+                    normalizeFlights(
+                        returnData
+                    );
 
 
-            console.log(
-                "🔥 RETURN TOKEN STATUS:",
-                returnData.search_metadata?.status
-            );
-
-
-            const returnRaw =
-                normalizeFlights(
-                    returnData
+                console.log(
+                    "🔥 RETURN TOKEN FLIGHTS:",
+                    returnRaw.length
                 );
 
 
-            console.log(
-                "🔥 RETURN TOKEN FLIGHTS:",
-                returnRaw.length
-            );
+                if (returnRaw.length > 0) {
+
+                    const returnFlights =
+                        returnRaw.map(
+                            (flight, index) => {
+
+                                return {
+
+                                    id: index,
+
+                                    /*
+                                    IMPORTANT:
+
+                                    Use the price returned by
+                                    Google Flights for this
+                                    selected outbound +
+                                    return combination.
+                                    */
+
+                                    price:
+                                        flight.price,
+
+                                    airline:
+                                        flight.airline,
+
+                                    airline_logo:
+                                        flight.airline_logo,
+
+                                    duration:
+                                        flight.duration,
+
+                                    signature:
+                                        flight.signature,
+
+                                    departure_token:
+                                        flight.departure_token,
+
+                                    booking_token:
+                                        flight.booking_token,
+
+                                    flights:
+                                        flight.flights
+
+                                };
+
+                            }
+                        );
 
 
-            /*
-            =====================================================
-            RETURN RESULTS
-            =====================================================
-            */
+                    console.log(
+                        "🔥 FINAL TOKEN RETURN PRICES:",
+                        returnFlights.map(
+                            flight => ({
 
-            const returnFlights =
-                returnRaw.map(
-                    (flight, index) => {
+                                airline:
+                                    flight.airline,
 
-                        return {
+                                price:
+                                    flight.price,
 
-                            id: index,
+                                signature:
+                                    flight.signature
 
-                            /*
-                            IMPORTANT:
-                            This is the price returned by the
-                            token search for the selected
-                            outbound + return itinerary.
-                            */
+                            })
+                        )
+                    );
 
-                            price:
-                                flight.price,
 
-                            airline:
-                                flight.airline,
+                    return res.status(200).json({
 
-                            airline_logo:
-                                flight.airline_logo,
+                        departure: [],
 
-                            duration:
-                                flight.duration,
+                        return:
+                            returnFlights,
 
-                            signature:
-                                flight.signature,
+                        mode:
+                            "return_by_departure_token"
 
-                            departure_token:
-                                flight.departure_token,
+                    });
 
-                            booking_token:
-                                flight.booking_token,
+                }
 
-                            flights:
-                                flight.flights
+            }
+            catch(tokenSearchError) {
 
-                        };
-
-                    }
+                console.log(
+                    "⚠️ TOKEN SEARCH FAILED:"
                 );
 
+                console.log(
+                    tokenSearchError.message
+                );
+
+                console.log(
+                    "⚠️ FALLING BACK TO NORMAL RETURN SEARCH"
+                );
+
+            }
+
+        }
+        else if (departure_token) {
 
             console.log(
-                "🔥 FINAL RETURN PRICES:",
-                returnFlights.map(
-                    flight => ({
-                        airline:
-                            flight.airline,
-
-                        price:
-                            flight.price,
-
-                        signature:
-                            flight.signature
-                    })
-                )
+                "⚠️ STALE OR INVALID DEPARTURE TOKEN"
             );
 
-
-            return res.status(200).json({
-
-                departure: [],
-
-                return:
-                    returnFlights,
-
-                mode:
-                    "return_by_departure_token"
-
-            });
+            console.log(
+                "⚠️ TOKEN WILL NOT BE USED"
+            );
 
         }
 
@@ -547,7 +651,7 @@ export default async function handler(req, res) {
         /*
         =========================================================
         STAGE 1
-        INITIAL ROUND TRIP SEARCH
+        INITIAL DEPARTURE SEARCH
         =========================================================
         */
 
@@ -575,7 +679,7 @@ export default async function handler(req, res) {
 
         /*
         =========================================================
-        ROUND TRIP
+        INITIAL SEARCH
         =========================================================
         */
 
@@ -591,7 +695,8 @@ export default async function handler(req, res) {
                 "1"
             );
 
-        } else {
+        }
+        else {
 
             departureParams.set(
                 "type",
@@ -602,7 +707,7 @@ export default async function handler(req, res) {
 
 
         console.log(
-            "🔥 INITIAL ROUND TRIP SEARCH:",
+            "🔥 INITIAL FLIGHT SEARCH:",
             {
                 origin,
                 destination,
@@ -661,11 +766,6 @@ export default async function handler(req, res) {
                         signature:
                             flight.signature,
 
-                        /*
-                        IMPORTANT:
-                        Keep this token.
-                        */
-
                         departure_token:
                             flight.departure_token,
 
@@ -691,6 +791,7 @@ export default async function handler(req, res) {
             "🔥 DEPARTURE TOKENS:",
             departureFlights.map(
                 flight => ({
+
                     airline:
                         flight.airline,
 
@@ -701,23 +802,218 @@ export default async function handler(req, res) {
                         flight.departure_token
                             ? "YES"
                             : "NO"
+
                 })
             )
         );
 
 
+
         /*
         =========================================================
-        IMPORTANT
+        FALLBACK RETURN SEARCH
         =========================================================
 
-        We DO NOT perform a second independent return search.
+        If we don't have a valid departure token, search
+        the return direction independently.
 
-        Return flights are retrieved only after the user
-        selects an outbound flight and supplies its
-        departure_token.
+        IMPORTANT:
+
+        We do NOT use the old departure token.
+
+        We search:
+
+        destination -> origin
+
+        using return_date.
         =========================================================
         */
+
+        let returnFlights = [];
+
+
+        if (return_date) {
+
+            const fallbackReturnParams =
+                new URLSearchParams();
+
+
+            fallbackReturnParams.set(
+                "departure_id",
+                destination
+            );
+
+
+            fallbackReturnParams.set(
+                "arrival_id",
+                origin
+            );
+
+
+            fallbackReturnParams.set(
+                "outbound_date",
+                return_date
+            );
+
+
+            fallbackReturnParams.set(
+                "type",
+                "2"
+            );
+
+
+            console.log(
+                "🔥 FALLBACK RETURN SEARCH:",
+                {
+                    departure_id:
+                        destination,
+
+                    arrival_id:
+                        origin,
+
+                    outbound_date:
+                        return_date,
+
+                    type:
+                        "2"
+                }
+            );
+
+
+            try {
+
+                const fallbackReturnData =
+                    await serpSearch(
+                        fallbackReturnParams
+                    );
+
+
+                console.log(
+                    "🔥 FALLBACK RETURN KEYS:",
+                    Object.keys(
+                        fallbackReturnData
+                    )
+                );
+
+
+                const returnRaw =
+                    normalizeFlights(
+                        fallbackReturnData
+                    );
+
+
+                console.log(
+                    "🔥 FALLBACK RETURN COUNT:",
+                    returnRaw.length
+                );
+
+
+                /*
+                IMPORTANT:
+
+                DO NOT match return prices against
+                departure flights.
+
+                The return search has its own prices.
+                */
+
+                returnFlights =
+                    returnRaw.map(
+                        (flight, index) => {
+
+                            return {
+
+                                id: index,
+
+                                price:
+                                    flight.price,
+
+                                airline:
+                                    flight.airline,
+
+                                airline_logo:
+                                    flight.airline_logo,
+
+                                duration:
+                                    flight.duration,
+
+                                signature:
+                                    flight.signature,
+
+                                departure_token:
+                                    flight.departure_token,
+
+                                booking_token:
+                                    flight.booking_token,
+
+                                flights:
+                                    flight.flights
+
+                            };
+
+                        }
+                    );
+
+
+                console.log(
+                    "🔥 FALLBACK RETURN PRICES:",
+                    returnFlights.map(
+                        flight => ({
+
+                            airline:
+                                flight.airline,
+
+                            price:
+                                flight.price,
+
+                            signature:
+                                flight.signature
+
+                        })
+                    )
+                );
+
+            }
+            catch(returnError) {
+
+                console.error(
+                    "🔥 FALLBACK RETURN SEARCH ERROR:",
+                    returnError.message
+                );
+
+                /*
+                Do not crash the entire departure search.
+
+                Return the departure results and an empty
+                return array so the frontend can handle it.
+                */
+
+                returnFlights = [];
+
+            }
+
+        }
+
+
+
+        /*
+        =========================================================
+        FINAL RESPONSE
+        =========================================================
+        */
+
+        console.log(
+            "🔥 FINAL RESULT:",
+            {
+
+                departures:
+                    departureFlights.length,
+
+                returns:
+                    returnFlights.length
+
+            }
+        );
 
 
         return res.status(200).json({
@@ -726,11 +1022,11 @@ export default async function handler(req, res) {
                 departureFlights,
 
             return:
-                [],
+                returnFlights,
 
             mode:
                 return_date
-                    ? "round_trip_initial"
+                    ? "round_trip"
                     : "one_way"
 
         });
