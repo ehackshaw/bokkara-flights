@@ -1,5 +1,11 @@
 export default async function handler(req, res) {
 
+    /*
+    =========================================================
+    CORS
+    =========================================================
+    */
+
     res.setHeader(
         "Access-Control-Allow-Origin",
         "*"
@@ -15,9 +21,11 @@ export default async function handler(req, res) {
         "Content-Type"
     );
 
+
     if (req.method === "OPTIONS") {
         return res.status(200).end();
     }
+
 
     if (req.method !== "POST") {
         return res.status(405).json({
@@ -25,43 +33,97 @@ export default async function handler(req, res) {
         });
     }
 
+
     try {
 
         const body = req.body || {};
+
 
         console.log(
             "🔥 REQUEST:",
             body
         );
 
+
+        /*
+        =========================================================
+        BASIC INPUT
+        =========================================================
+        */
+
         const adults =
-            Number(body.adults || 1);
+            Math.max(
+                1,
+                Number(body.adults || 1)
+            );
+
 
         const origin =
-            String(body.origin || "")
+            String(
+                body.origin || ""
+            )
                 .trim()
                 .toUpperCase();
+
 
         const destination =
-            String(body.destination || "")
+            String(
+                body.destination || ""
+            )
                 .trim()
                 .toUpperCase();
 
+
         const departure_date =
-            String(body.departure_date || "");
+            String(
+                body.departure_date || ""
+            )
+                .trim();
+
 
         const return_date =
-            String(body.return_date || "");
+            String(
+                body.return_date || ""
+            )
+                .trim();
+
 
         const selectedDepartureToken =
             String(
                 body.departure_token || ""
-            ).trim();
+            )
+                .trim();
 
 
         /*
         =========================================================
-        SERPAPI
+        SELECTED DEPARTURE PRICE
+
+        The frontend can send the price of the selected
+        outbound flight when requesting return flights.
+
+        This lets us guarantee that every return card uses
+        the SAME full round-trip price.
+        =========================================================
+        */
+
+        const requestedRoundTripPrice =
+            Number(
+                body.round_trip_price ||
+                body.selected_round_trip_price ||
+                0
+            );
+
+
+        console.log(
+            "🔥 INPUT ROUND TRIP PRICE:",
+            requestedRoundTripPrice
+        );
+
+
+        /*
+        =========================================================
+        SERPAPI SEARCH
         =========================================================
         */
 
@@ -72,35 +134,48 @@ export default async function handler(req, res) {
                 "google_flights"
             );
 
+
             params.set(
                 "currency",
                 "USD"
             );
+
 
             params.set(
                 "hl",
                 "en"
             );
 
+
             params.set(
                 "gl",
                 "us"
             );
+
 
             params.set(
                 "adults",
                 String(adults)
             );
 
+
             params.set(
                 "show_hidden",
                 "true"
             );
 
+
             params.set(
                 "sort_by",
                 "2"
             );
+
+
+            params.set(
+                "deep_search",
+                "true"
+            );
+
 
             params.set(
                 "api_key",
@@ -143,6 +218,7 @@ export default async function handler(req, res) {
                     json
                 );
 
+
                 throw new Error(
                     "SerpAPI ERROR " +
                     response.status
@@ -157,6 +233,7 @@ export default async function handler(req, res) {
                     "🔥 SERPAPI ERROR:",
                     json.error
                 );
+
 
                 throw new Error(
                     json.error
@@ -182,137 +259,252 @@ export default async function handler(req, res) {
                 return "";
             }
 
-            return segments.map(
-                segment => {
 
-                    return [
+            return segments
+                .map(
+                    segment => {
 
-                        segment.departure_airport?.id || "",
+                        return [
 
-                        segment.arrival_airport?.id || "",
+                            segment
+                                ?.departure_airport
+                                ?.id || "",
 
-                        segment.flight_number || ""
+                            segment
+                                ?.arrival_airport
+                                ?.id || "",
 
-                    ].join("-");
+                            segment
+                                ?.flight_number || ""
 
-                }
-            ).join("|");
+                        ].join("-");
+
+                    }
+                )
+                .join("|");
 
         }
 
 
         /*
         =========================================================
-        NORMALIZE INITIAL FLIGHTS
+        GET RAW FLIGHT ARRAYS
         =========================================================
         */
 
-        function normalizeInitialFlights(data) {
+        function collectFlightResults(data) {
 
-            const best =
-                Array.isArray(data.best_flights)
-                    ? data.best_flights
+            const results = [];
+
+
+            if (
+                Array.isArray(
+                    data?.best_flights
+                )
+            ) {
+
+                results.push(
+                    ...data.best_flights
+                );
+
+            }
+
+
+            if (
+                Array.isArray(
+                    data?.other_flights
+                )
+            ) {
+
+                results.push(
+                    ...data.other_flights
+                );
+
+            }
+
+
+            if (
+                Array.isArray(
+                    data?.return_flights
+                )
+            ) {
+
+                results.push(
+                    ...data.return_flights
+                );
+
+            }
+
+
+            if (
+                Array.isArray(
+                    data?.flights
+                )
+            ) {
+
+                results.push(
+                    ...data.flights
+                );
+
+            }
+
+
+            return results;
+
+        }
+
+
+        /*
+        =========================================================
+        NORMALIZE FLIGHT
+        =========================================================
+        */
+
+        function normalizeFlight(
+            flight,
+            index,
+            forcedRoundTripPrice = null
+        ) {
+
+            const segments =
+                Array.isArray(
+                    flight?.flights
+                )
+                    ? flight.flights
                     : [];
 
-            const other =
-                Array.isArray(data.other_flights)
-                    ? data.other_flights
-                    : [];
+
+            const apiPrice =
+                Number(
+                    flight?.price || 0
+                );
 
 
-            const results = [
-                ...best,
-                ...other
-            ];
+            /*
+            IMPORTANT:
+
+            If a forced round-trip price exists,
+            use that instead of the price returned
+            by the return continuation.
+            */
+
+            const finalRoundTripPrice =
+                Number(
+                    forcedRoundTripPrice
+                ) > 0
+                    ? Number(
+                        forcedRoundTripPrice
+                    )
+                    : apiPrice;
 
 
-            console.log(
-                "🔥 INITIAL best_flights:",
-                best.length
-            );
+            return {
 
-            console.log(
-                "🔥 INITIAL other_flights:",
-                other.length
-            );
-
-            console.log(
-                "🔥 INITIAL TOTAL:",
-                results.length
-            );
+                id:
+                    index,
 
 
-            return results.map(
-                (flight, index) => {
+                /*
+                Original API price.
+                */
 
-                    const segments =
-                        Array.isArray(flight.flights)
-                            ? flight.flights
-                            : [];
+                price:
+                    apiPrice,
 
 
-                    return {
+                /*
+                The price the frontend should use
+                for the complete round trip.
+                */
 
-                        id: index,
+                round_trip_price:
+                    finalRoundTripPrice,
 
-                        price:
-                            Number(
-                                flight.price || 0
-                            ),
 
-                        round_trip_price:
-                            Number(
-                                flight.price || 0
-                            ),
+                total_round_trip_price:
+                    finalRoundTripPrice,
 
-                        airline:
-                            segments[0]?.airline ||
-                            "Airline",
 
-                        airline_logo:
-                            segments[0]?.airline_logo ||
-                            "",
+                airline:
+                    segments[0]?.airline ||
+                    flight?.airline ||
+                    "Airline",
 
-                        duration:
-                            Number(
-                                flight.total_duration || 0
-                            ),
 
-                        signature:
-                            createSignature(
-                                segments
-                            ),
+                airline_logo:
+                    segments[0]?.airline_logo ||
+                    flight?.airline_logo ||
+                    "",
 
-                        flights:
-                            segments,
 
-                        departure_token:
-                            flight.departure_token ||
-                            null,
+                duration:
+                    Number(
+                        flight?.total_duration ||
+                        0
+                    ),
 
-                        booking_token:
-                            flight.booking_token ||
-                            null,
 
-                        type:
-                            flight.type ||
-                            "",
+                signature:
+                    createSignature(
+                        segments
+                    ),
 
-                        /*
-                        KEEP THE ORIGINAL
-                        SERP OBJECT.
 
-                        This is extremely important
-                        for debugging and future use.
-                        */
+                flights:
+                    segments,
 
-                        _serp_index:
-                            index
 
-                    };
+                departure_token:
+                    flight?.departure_token ||
+                    null,
 
-                }
-            );
+
+                booking_token:
+                    flight?.booking_token ||
+                    null,
+
+
+                type:
+                    flight?.type ||
+                    "",
+
+
+                /*
+                Preserve useful SerpAPI data.
+                */
+
+                extensions:
+                    Array.isArray(
+                        flight?.extensions
+                    )
+                        ? flight.extensions
+                        : [],
+
+
+                carbon_emissions:
+                    flight?.carbon_emissions ||
+                    null,
+
+
+                ticket_also_sold_by:
+                    Array.isArray(
+                        flight?.ticket_also_sold_by
+                    )
+                        ? flight.ticket_also_sold_by
+                        : [],
+
+
+                /*
+                Debug information.
+                */
+
+                _serp_index:
+                    index,
+
+                _api_price:
+                    apiPrice
+
+            };
 
         }
 
@@ -342,7 +534,20 @@ export default async function handler(req, res) {
         /*
         =========================================================
         MODE 1
-        INITIAL ROUND TRIP
+        INITIAL ROUND TRIP SEARCH
+        =========================================================
+
+        Search:
+
+        POS → PTY
+        outbound date
+        return date
+
+        Google Flights gives us outbound flights
+        containing individual departure_tokens.
+
+        We DO NOT attempt to retrieve return flights
+        until the user selects an outbound.
         =========================================================
         */
 
@@ -365,29 +570,28 @@ export default async function handler(req, res) {
                 origin
             );
 
+
             params.set(
                 "arrival_id",
                 destination
             );
+
 
             params.set(
                 "outbound_date",
                 departure_date
             );
 
+
             params.set(
                 "return_date",
                 return_date
             );
 
+
             params.set(
                 "type",
                 "1"
-            );
-
-            params.set(
-                "deep_search",
-                "true"
             );
 
 
@@ -408,6 +612,7 @@ export default async function handler(req, res) {
                 data.best_flights?.length || 0
             );
 
+
             console.log(
                 "🔥 INITIAL other_flights:",
                 data.other_flights?.length || 0
@@ -416,19 +621,55 @@ export default async function handler(req, res) {
 
             /*
             =====================================================
+            COLLECT INITIAL RESULTS
+            =====================================================
+            */
+
+            const rawFlights =
+                collectFlightResults(
+                    data
+                );
+
+
+            console.log(
+                "🔥 INITIAL TOTAL RAW:",
+                rawFlights.length
+            );
+
+
+            /*
+            =====================================================
             NORMALIZE
+
+            IMPORTANT:
+
+            flight.price here is the Google Flights
+            round-trip ticket price for the selected
+            outbound option.
+
+            We preserve it as round_trip_price.
             =====================================================
             */
 
             const departureFlights =
-                normalizeInitialFlights(
-                    data
+                rawFlights.map(
+                    (
+                        flight,
+                        index
+                    ) =>
+                        normalizeFlight(
+                            flight,
+                            index,
+                            Number(
+                                flight?.price || 0
+                            )
+                        )
                 );
 
 
             /*
             =====================================================
-            TOKEN CHECK
+            TOKEN DEBUG
             =====================================================
             */
 
@@ -444,17 +685,12 @@ export default async function handler(req, res) {
                 departureFlights.length
             );
 
+
             console.log(
                 "🔥 DEPARTURE TOKENS:",
                 tokenCount
             );
 
-
-            /*
-            =====================================================
-            TOKEN DEBUG
-            =====================================================
-            */
 
             console.log(
                 "🔥 FIRST DEPARTURE TOKEN:",
@@ -465,22 +701,43 @@ export default async function handler(req, res) {
             );
 
 
+            /*
+            =====================================================
+            PRICE DEBUG
+            =====================================================
+            */
+
             console.log(
-                "🔥 FIRST DEPARTURE:",
-                JSON.stringify(
-                    departureFlights[0],
-                    null,
-                    2
-                )
+                "🔥 INITIAL PRICES:",
+                departureFlights
+                    .slice(0, 10)
+                    .map(
+                        flight => ({
+
+                            airline:
+                                flight.airline,
+
+                            price:
+                                flight.price,
+
+                            round_trip_price:
+                                flight.round_trip_price,
+
+                            token:
+                                flight.departure_token
+                                    ? "YES"
+                                    : "NO"
+
+                        })
+                    )
             );
 
 
             /*
             =====================================================
-            RETURN EMPTY FOR NOW
+            RETURN EMPTY
 
-            Frontend MUST select an outbound.
-
+            Frontend must select outbound first.
             =====================================================
             */
 
@@ -496,7 +753,22 @@ export default async function handler(req, res) {
                     true,
 
                 pricing_mode:
-                    "google_round_trip"
+                    "google_round_trip",
+
+                trip_type:
+                    "round_trip",
+
+                origin:
+                    origin,
+
+                destination:
+                    destination,
+
+                departure_date:
+                    departure_date,
+
+                return_date:
+                    return_date
 
             });
 
@@ -507,6 +779,18 @@ export default async function handler(req, res) {
         =========================================================
         MODE 2
         SELECTED DEPARTURE
+
+        The frontend sends:
+
+        departure_token
+        round_trip_price
+
+        We use the departure_token to ask Google Flights
+        for the return options associated with that
+        EXACT outbound flight.
+
+        SerpApi documents departure_token as the mechanism
+        for retrieving returning flights. 
         =========================================================
         */
 
@@ -516,44 +800,51 @@ export default async function handler(req, res) {
         ) {
 
             console.log(
-                "🔥🔥🔥 MODE: SELECTED DEPARTURE"
+                "🔥🔥 MODE: SELECTED DEPARTURE"
             );
 
 
             console.log(
-                "🔥 TOKEN LENGTH:",
+                "🔥🔥 TOKEN LENGTH:",
                 selectedDepartureToken.length
             );
 
 
             console.log(
-                "🔥 TOKEN START:",
+                "🔥🔥 TOKEN START:",
                 selectedDepartureToken.substring(
                     0,
-                    80
+                    100
                 )
             );
 
 
             /*
             =====================================================
-            IMPORTANT
+            PRICE RULE
 
-            For a departure token continuation request,
-            do NOT send another normal outbound search.
+            If frontend supplied the selected outbound's
+            round-trip price, use it.
 
-            The token identifies the selected outbound.
+            Otherwise we attempt to recover the price from
+            the continuation response.
+            =====================================================
+            */
+
+            let selectedPrice =
+                requestedRoundTripPrice > 0
+                    ? requestedRoundTripPrice
+                    : null;
+
+
+            /*
+            =====================================================
+            SERPAPI TOKEN REQUEST
             =====================================================
             */
 
             const params =
                 new URLSearchParams();
-
-
-            params.set(
-                "engine",
-                "google_flights"
-            );
 
 
             params.set(
@@ -568,102 +859,15 @@ export default async function handler(req, res) {
             );
 
 
-            params.set(
-                "currency",
-                "USD"
-            );
-
-
-            params.set(
-                "hl",
-                "en"
-            );
-
-
-            params.set(
-                "gl",
-                "us"
-            );
-
-
-            params.set(
-                "adults",
-                String(adults)
-            );
-
-
-            params.set(
-                "show_hidden",
-                "true"
-            );
-
-
-            params.set(
-                "api_key",
-                process.env.SERPAPI_KEY
-            );
-
-
-            const url =
-                "https://serpapi.com/search.json?" +
-                params.toString();
-
-
-            console.log(
-                "🔥🔥 RETURN TOKEN REQUEST:",
-                url.replace(
-                    process.env.SERPAPI_KEY,
-                    "HIDDEN"
-                )
-            );
-
-
-            const response =
-                await fetch(url);
-
-
             const data =
-                await response.json();
-
-
-            console.log(
-                "🔥🔥 RETURN STATUS:",
-                response.status
-            );
-
-
-            if (!response.ok) {
-
-                console.log(
-                    "🔥🔥 RETURN ERROR:",
-                    data
+                await serpSearch(
+                    params
                 );
-
-                throw new Error(
-                    "Return SerpAPI ERROR " +
-                    response.status
-                );
-
-            }
-
-
-            if (data.error) {
-
-                console.log(
-                    "🔥🔥 RETURN SERP ERROR:",
-                    data.error
-                );
-
-                throw new Error(
-                    data.error
-                );
-
-            }
 
 
             /*
             =====================================================
-            THIS IS THE MOST IMPORTANT DEBUG
+            RESPONSE DEBUG
             =====================================================
             */
 
@@ -686,133 +890,27 @@ export default async function handler(req, res) {
 
 
             console.log(
-                "🔥🔥 RETURN airports:",
-                data.airports
-                    ? "YES"
-                    : "NO"
+                "🔥🔥 RETURN return_flights:",
+                data.return_flights?.length || 0
+            );
+
+
+            console.log(
+                "🔥🔥 RETURN flights:",
+                data.flights?.length || 0
             );
 
 
             /*
             =====================================================
-            GOOGLE FLIGHTS MAY RETURN FLIGHTS IN
-            OTHER STRUCTURES DURING TOKEN CONTINUATION.
-
-            CHECK EVERYTHING.
+            COLLECT RETURN FLIGHTS
             =====================================================
             */
 
-            const possibleArrays = [
-
-                {
-                    name:
-                        "best_flights",
-
-                    value:
-                        data.best_flights
-                },
-
-                {
-                    name:
-                        "other_flights",
-
-                    value:
-                        data.other_flights
-                },
-
-                {
-                    name:
-                        "flights",
-
-                    value:
-                        data.flights
-                },
-
-                {
-                    name:
-                        "return_flights",
-
-                    value:
-                        data.return_flights
-                }
-
-            ];
-
-
-            possibleArrays.forEach(
-                item => {
-
-                    console.log(
-                        "🔥 RETURN ARRAY:",
-                        item.name,
-                        Array.isArray(item.value)
-                            ? item.value.length
-                            : "NOT ARRAY"
-                    );
-
-                }
-            );
-
-
-            /*
-            =====================================================
-            COLLECT RETURN RESULTS
-            =====================================================
-            */
-
-            let returnRaw = [];
-
-
-            if (
-                Array.isArray(
-                    data.best_flights
-                )
-            ) {
-
-                returnRaw.push(
-                    ...data.best_flights
+            const returnRaw =
+                collectFlightResults(
+                    data
                 );
-
-            }
-
-
-            if (
-                Array.isArray(
-                    data.other_flights
-                )
-            ) {
-
-                returnRaw.push(
-                    ...data.other_flights
-                );
-
-            }
-
-
-            if (
-                Array.isArray(
-                    data.return_flights
-                )
-            ) {
-
-                returnRaw.push(
-                    ...data.return_flights
-                );
-
-            }
-
-
-            if (
-                Array.isArray(
-                    data.flights
-                )
-            ) {
-
-                returnRaw.push(
-                    ...data.flights
-                );
-
-            }
 
 
             console.log(
@@ -823,9 +921,47 @@ export default async function handler(req, res) {
 
             /*
             =====================================================
-            IF NOTHING CAME BACK
+            IF THE FRONTEND DID NOT SEND THE PRICE
 
-            DUMP THE RESPONSE STRUCTURE.
+            Try to recover it from the continuation response.
+
+            The first returned result may contain the complete
+            round-trip fare.
+            =====================================================
+            */
+
+            if (
+                !selectedPrice &&
+                returnRaw.length > 0
+            ) {
+
+                const possiblePrice =
+                    Number(
+                        returnRaw[0]?.price || 0
+                    );
+
+
+                if (
+                    possiblePrice > 0
+                ) {
+
+                    selectedPrice =
+                        possiblePrice;
+
+                }
+
+            }
+
+
+            console.log(
+                "🔥🔥 FINAL SELECTED ROUND TRIP PRICE:",
+                selectedPrice
+            );
+
+
+            /*
+            =====================================================
+            NO RETURN RESULTS
             =====================================================
             */
 
@@ -862,13 +998,36 @@ export default async function handler(req, res) {
                     pricing_mode:
                         "google_round_trip",
 
+                    selected_round_trip_price:
+                        selectedPrice,
+
                     debug: {
 
                         message:
                             "SerpAPI returned no recognizable return flight array",
 
                         response_keys:
-                            Object.keys(data)
+                            Object.keys(data),
+
+                        return_counts: {
+
+                            best_flights:
+                                data.best_flights?.length ||
+                                0,
+
+                            other_flights:
+                                data.other_flights?.length ||
+                                0,
+
+                            return_flights:
+                                data.return_flights?.length ||
+                                0,
+
+                            flights:
+                                data.flights?.length ||
+                                0
+
+                        }
 
                     }
 
@@ -880,104 +1039,55 @@ export default async function handler(req, res) {
             /*
             =====================================================
             NORMALIZE RETURN FLIGHTS
+
+            CRITICAL:
+
+            Every return flight gets the SAME
+            selected_round_trip_price.
+
+            We do NOT use the return flight's own
+            price as the displayed round-trip price.
             =====================================================
             */
 
             const returnFlights =
                 returnRaw.map(
-                    (flight, index) => {
-
-                        /*
-                        Some continuation responses
-                        may contain nested flight objects.
-                        */
-
-                        const segments =
-                            Array.isArray(
-                                flight.flights
-                            )
-                                ? flight.flights
-                                : [];
-
-
-                        return {
-
-                            id:
-                                index,
-
-                            price:
-                                Number(
-                                    flight.price || 0
-                                ),
-
-                            round_trip_price:
-                                Number(
-                                    flight.price || 0
-                                ),
-
-                            airline:
-                                segments[0]?.airline ||
-                                flight.airline ||
-                                "Airline",
-
-                            airline_logo:
-                                segments[0]?.airline_logo ||
-                                flight.airline_logo ||
-                                "",
-
-                            duration:
-                                Number(
-                                    flight.total_duration ||
-                                    0
-                                ),
-
-                            signature:
-                                createSignature(
-                                    segments
-                                ),
-
-                            flights:
-                                segments,
-
-                            booking_token:
-                                flight.booking_token ||
-                                null,
-
-                            departure_token:
-                                flight.departure_token ||
-                                null,
-
-                            type:
-                                flight.type ||
-                                ""
-
-                        };
-
-                    }
+                    (
+                        flight,
+                        index
+                    ) =>
+                        normalizeFlight(
+                            flight,
+                            index,
+                            selectedPrice
+                        )
                 );
 
 
-            console.log(
-                "🔥🔥 FINAL RETURN COUNT:",
-                returnFlights.length
-            );
+            /*
+            =====================================================
+            RETURN PRICE DEBUG
+            =====================================================
+            */
 
-
             console.log(
-                "🔥🔥 RETURN PRICE CHECK:",
+                "🔥🔥 FINAL RETURN PRICES:",
                 returnFlights
-                    .slice(0, 10)
+                    .slice(0, 20)
                     .map(
                         flight => ({
 
                             airline:
                                 flight.airline,
 
-                            price:
+                            api_price:
                                 flight.price,
 
                             round_trip_price:
                                 flight.round_trip_price,
+
+                            total_round_trip_price:
+                                flight.total_round_trip_price,
 
                             signature:
                                 flight.signature
@@ -986,6 +1096,12 @@ export default async function handler(req, res) {
                     )
             );
 
+
+            /*
+            =====================================================
+            RETURN RESPONSE
+            =====================================================
+            */
 
             return res.status(200).json({
 
@@ -999,7 +1115,35 @@ export default async function handler(req, res) {
                     false,
 
                 pricing_mode:
-                    "google_round_trip"
+                    "google_round_trip",
+
+                /*
+                This is the price of the selected
+                outbound + return combination.
+                */
+
+                selected_round_trip_price:
+                    selectedPrice,
+
+                /*
+                Keep the selected token available
+                for debugging / frontend use.
+                */
+
+                selected_departure_token:
+                    selectedDepartureToken,
+
+                origin:
+                    origin,
+
+                destination:
+                    destination,
+
+                departure_date:
+                    departure_date,
+
+                return_date:
+                    return_date
 
             });
 
@@ -1032,15 +1176,18 @@ export default async function handler(req, res) {
                 origin
             );
 
+
             params.set(
                 "arrival_id",
                 destination
             );
 
+
             params.set(
                 "outbound_date",
                 departure_date
             );
+
 
             params.set(
                 "type",
@@ -1054,11 +1201,30 @@ export default async function handler(req, res) {
                 );
 
 
-            const flights =
-                normalizeInitialFlights(
+            const rawFlights =
+                collectFlightResults(
                     data
                 );
 
+
+            const flights =
+                rawFlights.map(
+                    (
+                        flight,
+                        index
+                    ) =>
+                        normalizeFlight(
+                            flight,
+                            index,
+                            null
+                        )
+                );
+
+
+            /*
+            ONE-WAY FLIGHTS SHOULD NOT
+            HAVE A ROUND-TRIP PRICE.
+            */
 
             const oneWayFlights =
                 flights.map(
@@ -1067,10 +1233,19 @@ export default async function handler(req, res) {
                         ...flight,
 
                         round_trip_price:
+                            null,
+
+                        total_round_trip_price:
                             null
 
                     })
                 );
+
+
+            console.log(
+                "🔥 ONE WAY COUNT:",
+                oneWayFlights.length
+            );
 
 
             return res.status(200).json({
@@ -1085,12 +1260,21 @@ export default async function handler(req, res) {
                     false,
 
                 pricing_mode:
+                    "one_way",
+
+                trip_type:
                     "one_way"
 
             });
 
         }
 
+
+        /*
+        =========================================================
+        INVALID REQUEST
+        =========================================================
+        */
 
         return res.status(400).json({
 
@@ -1100,6 +1284,7 @@ export default async function handler(req, res) {
         });
 
     }
+
 
     catch (error) {
 
@@ -1115,7 +1300,8 @@ export default async function handler(req, res) {
                 "Server crashed",
 
             message:
-                error.message
+                error?.message ||
+                "Unknown server error"
 
         });
 
