@@ -1,7 +1,7 @@
 export default async function handler(req,res){
 res.setHeader(
 "Access-Control-Allow-Origin",
-"\*"
+"*"
 );
 res.setHeader(
 "Access-Control-Allow-Methods",
@@ -30,7 +30,7 @@ Number(body.adults || 1);
 async function serpSearch(params){
 params.set(
 "engine",
-"google\_flights"
+"google_flights"
 );
 params.set(
 "currency",
@@ -49,29 +49,29 @@ params.set(
 adults
 );
 params.set(
-"deep\_search",
+"deep_search",
 "true"
 );
 params.set(
-"show\_hidden",
+"show_hidden",
 "true"
 );
 params.set(
-"sort\_by",
+"sort_by",
 "2"
 );
 params.set(
-"api\_key",
-process.env.SERPAPI\_KEY
+"api_key",
+process.env.SERPAPI_KEY
 );
 const url =
-"[https://serpapi.com/search.json](https://serpapi.com/search.json)?"
-\+
+"https://serpapi.com/search.json?"
++
 params.toString();
 console.log(
 "SERP REQUEST:",
 url.replace(
-process.env.SERPAPI\_KEY,
+process.env.SERPAPI_KEY,
 "HIDDEN"
 )
 );
@@ -97,16 +97,16 @@ return json;
 function createSignature(segments){
 return segments.map(segment=>{
 return [
-segment.departure\_airport?.id || "",
-segment.arrival\_airport?.id || "",
-segment.flight\_number || ""
+segment.departure_airport?.id || "",
+segment.arrival_airport?.id || "",
+segment.flight_number || ""
 ].join("-");
 }).join("|");
 }
 function normalizeFlights(data){
 const results = [
-...(data.best\_flights || []),
-...(data.other\_flights || [])
+...(data.best_flights || []),
+...(data.other_flights || [])
 ];
 console.log(
 "🔥 TOTAL RAW SERP FLIGHTS:",
@@ -116,17 +116,17 @@ return results.map((flight,index)=>{
 const segments =
 flight.flights || [];
 return {
-id\:index,
+id:index,
 price:
 flight.price || 0,
 airline:
 segments[0]?.airline ||
 "Airline",
-airline\_logo:
-segments[0]?.airline\_logo ||
+airline_logo:
+segments[0]?.airline_logo ||
 "",
 duration:
-flight.total\_duration || 0,
+flight.total_duration || 0,
 signature:
 createSignature(segments),
 flights:
@@ -142,44 +142,44 @@ const destination =
 String(body.destination || "")
 .trim()
 .toUpperCase();
-const departure\_date =
-body.departure\_date;
-const return\_date =
-body.return\_date;
+const departure_date =
+body.departure_date;
+const return_date =
+body.return_date;
 if(
 !origin ||
 !destination ||
-!departure\_date
+!departure_date
 ){
 return res.status(400).json({
 error:"Missing flight fields"
 });
 }
-/\*
-\*/
+/*
+*/
 const departureParams =
 new URLSearchParams();
 departureParams.set(
-"departure\_id",
+"departure_id",
 origin
 );
 departureParams.set(
-"arrival\_id",
+"arrival_id",
 destination
 );
 departureParams.set(
-"outbound\_date",
-departure\_date
+"outbound_date",
+departure_date
 );
-if(return\_date){
+if(return_date){
 departureParams.set(
-"return\_date",
-return\_date
+"return_date",
+return_date
 );
 }
 departureParams.set(
 "type",
-return\_date ? "1" : "2"
+return_date ? "1" : "2"
 );
 const departureData =
 await serpSearch(
@@ -194,15 +194,15 @@ normalizeFlights(
 departureData
 );
 const departureFlights =
-departureRaw\.map((flight,index)=>{
+departureRaw.map((flight,index)=>{
 return {
-id\:index,
+id:index,
 price:
 flight.price,
 airline:
 flight.airline,
-airline\_logo:
-flight.airline\_logo,
+airline_logo:
+flight.airline_logo,
 duration:
 flight.duration,
 signature:
@@ -212,22 +212,22 @@ flight.flights
 };
 });
 let returnFlights=[];
-/\*
-\*/
-if(return\_date){
+/*
+*/
+if(return_date){
 const returnParams =
 new URLSearchParams();
 returnParams.set(
-"departure\_id",
+"departure_id",
 destination
 );
 returnParams.set(
-"arrival\_id",
+"arrival_id",
 origin
 );
 returnParams.set(
-"outbound\_date",
-return\_date
+"outbound_date",
+return_date
 );
 returnParams.set(
 "type",
@@ -247,25 +247,25 @@ returnData
 );
 console.log(
 "🔥 RETURN COUNT:",
-returnRaw\.length
+returnRaw.length
 );
 returnFlights =
-returnRaw\.map((flight,index)=>{
-/\*
+returnRaw.map((flight,index)=>{
+/*
 SMART PRICE MATCHING
-\*/
+*/
 const exactMatch =
-departureRaw\.find(
+departureRaw.find(
 (dep)=>
 dep.signature === flight.signature
 );
 const airlineMatch =
-departureRaw\.find(
+departureRaw.find(
 (dep)=>
 dep.airline === flight.airline
 );
 return {
-id\:index,
+id:index,
 price:
 exactMatch?.price ||
 airlineMatch?.price ||
@@ -273,8 +273,8 @@ departureRaw[0]?.price ||
 flight.price,
 airline:
 flight.airline,
-airline\_logo:
-flight.airline\_logo,
+airline_logo:
+flight.airline_logo,
 duration:
 flight.duration,
 signature:
@@ -315,7 +315,7 @@ error
 );
 return res.status(500).json({
 error:"Server crashed",
-message\:error.message
+message:error.message
 });
 }
 }
